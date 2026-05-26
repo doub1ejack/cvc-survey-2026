@@ -1,0 +1,2563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CVC Survey Data Explorer</title>
+  
+  <!-- CDNs for React, ReactDOM, Babel Standalone, D3, and Tailwind CSS -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: #f8fafc;
+    }
+    /* Smooth transition for sliding panels and scale effects */
+    .transition-all-300 {
+      transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* Hide scrollbars for slick look but maintain scrollability */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+
+  <script>
+    // Custom tailwind configuration for consistent accents
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              900: '#14532d',
+            },
+            accent: {
+              indigo: '#6366f1',
+              violet: '#8b5cf6',
+              rose: '#f43f5e',
+              amber: '#f59e0b',
+              slate: '#475569',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="text-slate-800 antialiased overflow-x-hidden min-h-screen flex flex-col">
+
+  <!-- 
+    CVC Survey Data Explorer
+    Built for conversion to Claude artifact
+    
+    TO CONVERT TO ARTIFACT:
+    1. Replace fetchData() implementation with Anthropic MCP route
+    2. CONFIG block becomes runtime SettingsModal (already built)
+    3. Verify all CDN imports are accessible from artifact sandbox
+    4. Remove proxy.js dependency (already absent from this file)
+  -->
+
+  <div id="root">
+    <!-- Initial Loading State before React Hydration -->
+    <div class="flex flex-col items-center justify-center h-screen bg-slate-900 text-white">
+      <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500 mb-4"></div>
+      <h1 class="text-xl font-medium tracking-wide">CVC Survey Data Explorer</h1>
+      <p class="text-slate-400 text-sm mt-1">Initializing Dashboard...</p>
+    </div>
+  </div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // ===== CONFIGURATION =====
+    const CONFIG = {
+      NOTION_API_KEY: '',      // Filled dynamically via SettingsModal
+      NOTION_DATABASE_ID: '',  // Filled dynamically via SettingsModal
+      PROXY_URL: 'http://localhost:3001/notion-data',
+    };
+    // =========================
+
+    // invented name pool for deterministic anonymization
+    const INVENTED_NAMES = [
+      'Rowan', 'Calen', 'Maren', 'Arden', 'Quinn', 'Riven', 'Solen', 'Talen', 'Varen', 'Wren',
+      'Balen', 'Daren', 'Firen', 'Jolen', 'Kiren', 'Laven', 'Nolen', 'Paren', 'Thren', 'Zolen'
+    ];
+
+    // List of 19 Analytical Row Tags (from Notion "Row tags" multi-select)
+    const THEME_TAGS = [
+      'community-strength', 'relational-warmth', 'good-faith', 'epistemic-humility',
+      'trajectory-positive', 'location-first'
+    ];
+
+    const SIGNAL_TAGS = [
+      'governance-complexity', 'proposal-friction', 'participation-barriers-life',
+      'board-circles-tension', 'behavioral-failures', 'conflict-normalized',
+      'emotional-toll', 'infrastructure-gaps', 'pathways-unclear',
+      'social-exclusion', 'access-invisible', 'life-barriers-only',
+      'governance-system-design'
+    ];
+
+    const ALL_TAGS = [...THEME_TAGS, ...SIGNAL_TAGS];
+
+    // High-Fidelity Preloaded Demo Data matching raw Notion API JSON structure
+    const DEMO_PAGES = [
+      {
+        id: "res-01",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Sarah Jenkins" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "community-strength" }, { name: "relational-warmth" }, { name: "good-faith" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The Circle system has really allowed me to get involved in land stewardship quickly. I feel supported!" }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Eating dinners together in the common house. It's the heartbeat of CVC." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Sometimes it's hard to know which circle is working on what." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None so far, everyone has been very welcoming." }] }
+        }
+      },
+      {
+        id: "res-02",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "David Miller" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "location-first" }, { name: "emotional-toll" }, { name: "governance-system-design" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Consensus is wonderful but meeting times are getting out of hand. We need better facilitation." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The beautiful common house facilities and walking trails." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Streamlining decision-making processes." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Plenaries scheduled on weekday evenings clash with my work shifts." }] }
+        }
+      },
+      {
+        id: "res-03",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Elena Rostova" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 2 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 2 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "governance-complexity" }, { name: "infrastructure-gaps" }, { name: "trajectory-positive" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "It feels like 20% of the people do 80% of the work. Land and maintenance chores are heavily unequal." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Working alongside neighbors during land workdays." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "We need an objective audit of circle workloads." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Physical limitations prevent me from helping with heavy chore tasks." }] }
+        }
+      },
+      {
+        id: "res-04",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Robert Chen" }] },
+          "Tenure": { type: "select", select: { name: "10+ yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 5 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "epistemic-humility" }, { name: "community-strength" }, { name: "social-exclusion" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Having lived here for a decade, I can say our sociocracy-based governance is stronger than ever." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Watching kids grow up here and seeing the elder support networks in action." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Helping newer members integrate into our systems." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None." }] }
+        }
+      },
+      {
+        id: "res-05",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Emily Watson" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "access-invisible" }, { name: "pathways-unclear" }, { name: "conflict-normalized" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "As a new parent, finding the right circle to join is confusing. Roles are not well documented." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The kids running around in safety, and the outdoor playspace." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Creating better onboarding guides for new residents." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Childcare during circle meetings is a consistent struggle." }] }
+        }
+      },
+      {
+        id: "res-06",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Marcus Aurelius" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "No" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Not at all satisfied" } },
+          "Q13": { type: "number", number: 2 },
+          "Q14": { type: "number", number: 1 },
+          "Q15": { type: "number", number: 1 },
+          "Q16": { type: "number", number: 2 },
+          "Q22": { type: "number", number: 1 },
+          "Q23": { type: "number", number: 1 },
+          "Q24": { type: "number", number: 2 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "governance-complexity" }, { name: "proposal-friction" }, { name: "board-circles-tension" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "There is an active inner-circle that drives all major decisions. If you dissent, your voice is bypassed." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The physical landscape and the quiet environment." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "We need an external mediator. The conflict resolution path is broken." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "I feel completely alienated and have stopped attending plenaries." }] }
+        }
+      },
+      {
+        id: "res-07",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Clara Oswald" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 5 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "participation-barriers-life" }, { name: "good-faith" }, { name: "location-first" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Communication has improved dramatically since we started using digital boards for circle logs." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The summer music festivals on the lawn and craft nights in the basement." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Ensuring we maintain our physical buildings better." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Busy work schedule, but I can participate asynchronously." }] }
+        }
+      },
+      {
+        id: "res-08",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Timothy Bell" }] },
+          "Tenure": { type: "select", select: { name: "10+ yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 2 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "emotional-toll" }, { name: "behavioral-failures" }, { name: "pathways-unclear" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "We sit in meetings for hours talking about tiny expenditures. We need more financial trust in managers." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The beautiful architecture and passive solar designs." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Increase financial spending thresholds for general circles." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Burnout. I have stepped back from leadership roles." }] }
+        }
+      },
+      {
+        id: "res-09",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Grace Hopper" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "epistemic-humility" }, { name: "trajectory-positive" }, { name: "community-strength" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "It is rewarding to see committees functioning. Sometimes it is slow, but it works." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Community garden plots and tool sharing libraries." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "More transparency in overall budget planning." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "I struggle with public speaking in large plenaries." }] }
+        }
+      },
+      {
+        id: "res-10",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Frank Reynolds" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Not at all satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 2 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 2 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "governance-complexity" }, { name: "proposal-friction" }, { name: "good-faith" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Fulfillment is high because I love my neighbors, but governance is an absolute mess. Way too political." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Gatherings at the fire pit and hanging out on porches." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Banning passive-aggressive mailing list threads." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "I refuse to sit through circles that feel like debating clubs." }] }
+        }
+      },
+      {
+        id: "res-11",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Nora Jones" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "No" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 2 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 2 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "conflict-normalized" }, { name: "life-barriers-only" }, { name: "social-exclusion" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The circles run fine, but socially I feel left out. As a senior without a young family, it is isolating." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The library and quiet reading room in the common house." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "More events tailored for older or single residents." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Evening meetings make me tired, and winter driving is difficult." }] }
+        }
+      },
+      {
+        id: "res-12",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Bruce Wayne" }] },
+          "Tenure": { type: "select", select: { name: "10+ yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "governance-system-design" }, { name: "behavioral-failures" }, { name: "trajectory-positive" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "We managed to fund our major solar expansion through consensual budgeting, which was fantastic." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Our woodchip heating plant and independent energy grids." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "We need long-term financial planning for capital repairs." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Heavy professional workload prevents daily involvement." }] }
+        }
+      },
+      {
+        id: "res-13",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Diana Prince" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 5 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "epistemic-humility" }, { name: "good-faith" }, { name: "access-invisible" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The support when someone falls ill or has a baby is second to none. The care circle is outstanding." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The feeling of cooperative security. We really look out for one another." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Sharing parenting load and babysitting trades." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None, it is a pleasure to serve." }] }
+        }
+      },
+      {
+        id: "res-14",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Peter Parker" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 2 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "behavioral-failures" }, { name: "life-barriers-only" }, { name: "location-first" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Co-housing is expensive. As a younger person, the community fees are a massive burden." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The workshop space in the barn, fully stocked with tools." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "More affordable housing options or subsidizations." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Working multiple jobs leaves very little energy for circle meetings." }] }
+        }
+      },
+      {
+        id: "res-15",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Arthur Dent" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "No" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 2 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 2 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "board-circles-tension" }, { name: "proposal-friction" }, { name: "governance-system-design" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Our email channels are filled with misunderstandings. I wish we talked in person more." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Quiet tea in the common house kitchen when no one is around." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Restricting controversial discussions to in-person plenaries." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "The social drama drains my battery completely." }] }
+        }
+      },
+      {
+        id: "res-16",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Luke Skywalker" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "trajectory-positive" }, { name: "pathways-unclear" }, { name: "epistemic-humility" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The land work is highly organized but the overlap between Land Circle and overall Management is fuzzy." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The solar fields, the sheep pasture, and planting trees." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Define boundaries between circles more cleanly." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Sometimes meetings feel overly formal and intimidating." }] }
+        }
+      },
+      {
+        id: "res-17",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Leia Organa" }] },
+          "Tenure": { type: "select", select: { name: "10+ yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 5 },
+          "Q15": { type: "number", number: 5 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 5 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "governance-system-design" }, { name: "governance-complexity" }, { name: "community-strength" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "We have faced immense zoning challenges and resolved them collaboratively. Proof that consensus works." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The collective intelligence of this group. It's inspiring." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Keep documents clean and easily accessible on our wiki." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None, it's my life's passion." }] }
+        }
+      },
+      {
+        id: "res-18",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Frodo Baggins" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "good-faith" }, { name: "location-first" }, { name: "conflict-normalized" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "I enjoy the pub nights, but sometimes there's a clicky atmosphere." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The coziness of the library and the shared pantry." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "More outreach activities to mix groups up." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Quiet nature makes it hard to speak up when conflicts occur." }] }
+        }
+      },
+      {
+        id: "res-19",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Samwise Gamgee" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 5 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "trajectory-positive" }, { name: "epistemic-humility" }, { name: "relational-warmth" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The gardening committee is absolutely thriving! Work is shared wonderfully." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The community kitchen garden and growing food for common dinners." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Buying a communal greenhouse." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "No barriers. Love this place." }] }
+        }
+      },
+      {
+        id: "res-20",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Gandalf Grey" }] },
+          "Tenure": { type: "select", select: { name: "10+ yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "social-exclusion" }, { name: "governance-system-design" }, { name: "emotional-toll" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "We must ensure we are passing knowledge to the younger generations smoothly." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Listening to the campfire stories and historical cohousing memories." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Create a formal archives circle." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Age makes sitting for 3-hour plenaries physically tiring." }] }
+        }
+      },
+      {
+        id: "res-21",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Tony Stark" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 4 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "participation-barriers-life" }, { name: "behavioral-failures" }, { name: "pathways-unclear" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "I think we can automate some of our finance reports. It takes too much manual spreadsheet time." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The high-speed fiber internet and maker space." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Modernize our circle management software." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Impatience with slow consensus round-robins." }] }
+        }
+      },
+      {
+        id: "res-22",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Steve Rogers" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Very satisfied" } },
+          "Q13": { type: "number", number: 5 },
+          "Q14": { type: "number", number: 5 },
+          "Q15": { type: "number", number: 4 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 5 },
+          "Q23": { type: "number", number: 5 },
+          "Q24": { type: "number", number: 5 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "community-strength" }, { name: "board-circles-tension" }, { name: "epistemic-humility" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Our conflict resolution circle did an incredible job last month resolving a complex dog-leash policy dispute." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The volunteer workdays and helping neighbors with chores." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Documenting our historical consensus agreements." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None, proud to be a part of this team." }] }
+        }
+      },
+      {
+        id: "res-23",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Natasha Romanoff" }] },
+          "Tenure": { type: "select", select: { name: "3-5 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 3 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 3 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "proposal-friction" }, { name: "pathways-unclear" }, { name: "governance-complexity" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "Information flows poorly. A lot of backroom decisions happen outside official circle meetings." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The serene landscape and physical layouts of the homes." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Ban offline decision-making on key issues." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Felt isolated after voicing a controversial opinion." }] }
+        }
+      },
+      {
+        id: "res-24",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Thor Odinson" }] },
+          "Tenure": { type: "select", select: { name: "0-2 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Yes" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat satisfied" } },
+          "Q13": { type: "number", number: 4 },
+          "Q14": { type: "number", number: 4 },
+          "Q15": { type: "number", number: 3 },
+          "Q16": { type: "number", number: 4 },
+          "Q22": { type: "number", number: 4 },
+          "Q23": { type: "number", number: 3 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "good-faith" }, { name: "relational-warmth" }, { name: "participation-barriers-life" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "The kitchen circle does an amazing job preparing huge feasts. It is very satisfying." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "Shared cooking nights! The food is legendary!" }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Expanding the brewing and cider-making setups." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "None, it is a magnificent place!" }] }
+        }
+      },
+      {
+        id: "res-25",
+        properties: {
+          "Name": { type: "title", title: [{ plain_text: "Wanda Maximoff" }] },
+          "Tenure": { type: "select", select: { name: "6-10 yrs" } },
+          "Fulfillment": { type: "select", select: { name: "Somewhat" } },
+          "Governance Satisfaction": { type: "select", select: { name: "Somewhat dissatisfied" } },
+          "Q13": { type: "number", number: 3 },
+          "Q14": { type: "number", number: 2 },
+          "Q15": { type: "number", number: 2 },
+          "Q16": { type: "number", number: 3 },
+          "Q22": { type: "number", number: 3 },
+          "Q23": { type: "number", number: 2 },
+          "Q24": { type: "number", number: 4 },
+          "Tags": { type: "multi_select", multi_select: [{ name: "conflict-normalized" }, { name: "board-circles-tension" }, { name: "proposal-friction" }] },
+          "Governance Comments": { type: "rich_text", rich_text: [{ plain_text: "When conflicts arise, they are swept under the rug rather than discussed openly. It makes me anxious." }] },
+          "Favorite Part": { type: "rich_text", rich_text: [{ plain_text: "The beautiful pond and quiet sitting spots." }] },
+          "Areas of Growth": { type: "rich_text", rich_text: [{ plain_text: "Creating safer spaces for difficult social feedback." }] },
+          "Participation Barriers": { type: "rich_text", rich_text: [{ plain_text: "Social anxiety when plenaries get emotionally charged." }] }
+        }
+      }
+    ];
+
+    // Helper to get raw cell value defensively from Notion properties
+    // Supports case-insensitive matching, multi-option aliases, joining rich text, and Likert decoding.
+    function getPropValue(page, propName, type, defaultValue) {
+      if (!page || !page.properties) return defaultValue;
+
+      // Normalize propName to an array of lowercase strings for matching
+      const names = (Array.isArray(propName) ? propName : [propName]).map(x => x.toLowerCase().trim());
+
+      // Look up key in page.properties case-insensitively
+      let actualKey = null;
+      for (const name of names) {
+        actualKey = Object.keys(page.properties).find(
+          k => k.toLowerCase().trim() === name
+        );
+        if (actualKey) break;
+      }
+
+      if (!actualKey) return defaultValue;
+      const prop = page.properties[actualKey];
+      if (!prop) return defaultValue;
+
+      switch (type) {
+        case 'title':
+          return prop.title?.[0]?.plain_text || defaultValue;
+        case 'rich_text':
+          if (Array.isArray(prop.rich_text)) {
+            return prop.rich_text.map(x => x.plain_text).join('') || defaultValue;
+          }
+          return defaultValue;
+        case 'select':
+          return prop.select?.name || defaultValue;
+        case 'multi_select':
+          return Array.isArray(prop.multi_select) ? prop.multi_select.map(x => x.name) : defaultValue;
+        case 'number':
+          return typeof prop.number === 'number' ? prop.number : defaultValue;
+        case 'likert_score':
+          if (prop.type === 'number' && typeof prop.number === 'number') {
+            return prop.number;
+          }
+          if (prop.type === 'select' && prop.select) {
+            const val = prop.select.name;
+            if (!val) return defaultValue;
+            if (!isNaN(val)) return Number(val);
+            const map = {
+              'SA': 5,
+              'A': 4,
+              'N': 3,
+              'D': 2,
+              'SD': 1
+            };
+            return map[val.toUpperCase()] || defaultValue;
+          }
+          return defaultValue;
+        default:
+          return defaultValue;
+      }
+    }
+
+    // API fetch logic
+    async function fetchData(config, useDemo) {
+      if (useDemo) {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(DEMO_PAGES), 400); // Small delay for realistic feel
+        });
+      }
+
+      // Fetch from local Express proxy
+      const headers = {
+        'x-notion-api-key': config.NOTION_API_KEY,
+        'x-notion-database-id': config.NOTION_DATABASE_ID
+      };
+
+      try {
+        const response = await fetch(config.PROXY_URL, { headers });
+        if (!response.ok) {
+          const errJson = await response.json().catch(() => ({}));
+          console.warn('Proxy fetch failed, falling back to demo data:', errJson.error || response.status);
+          return DEMO_PAGES;
+        }
+        const data = await response.json();
+        return data.results || [];
+      } catch (e) {
+        console.warn('Fetch error, using demo data:', e);
+        return DEMO_PAGES;
+      }
+    }
+
+    // Data transformation and anonymization engine
+    function transformData(rawPages) {
+      // 1. Sort pages stably by their ID to ensure deterministic mapping
+      const sortedPages = [...rawPages].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+
+      // 2. Generate deterministic anonymized name map
+      const anonMap = new Map();
+      sortedPages.forEach((page, idx) => {
+        const inventedIndex = idx % INVENTED_NAMES.length;
+        const namePrefix = INVENTED_NAMES[inventedIndex];
+        const rowNumber = String(idx + 1).padStart(2, '0');
+        const anonName = `${namePrefix}-${rowNumber}`;
+        anonMap.set(page.id, anonName);
+      });
+
+      // 3. Transform and clean records defensively
+      return sortedPages.map(page => {
+        const anonName = anonMap.get(page.id);
+
+        // Map Notion properties to clean object fields
+        const tenure = getPropValue(page, 'Tenure', 'select', '0-2 yrs');
+        const fulfillment = getPropValue(page, 'Fulfillment', 'select', 'Somewhat');
+        const govSatisfaction = getPropValue(page, ['Governance Satisfaction', 'Governance satisfaction'], 'select', 'Somewhat satisfied');
+
+        // Extract and coerce Likert scales Q13-Q24 to numbers (fallback to 3/Neutral)
+        const q13 = Number(getPropValue(page, ['Q13', 'Q13 Treated respectfully'], 'likert_score', 3));
+        const q14 = Number(getPropValue(page, ['Q14', 'Q14 Efforts appreciated'], 'likert_score', 3));
+        const q15 = Number(getPropValue(page, ['Q15', 'Q15 Voice heard'], 'likert_score', 3));
+        const q16 = Number(getPropValue(page, ['Q16', 'Q16 Participation path clear'], 'likert_score', 3));
+        const q22 = Number(getPropValue(page, ['Q22', 'Q22 Balance obligations'], 'likert_score', 3));
+        const q23 = Number(getPropValue(page, ['Q23', 'Q23 Land/facilities maintained'], 'likert_score', 3));
+        const q24 = Number(getPropValue(page, ['Q24', 'Q24 Satisfied participation level'], 'likert_score', 3));
+
+        // Extract Row tags (19 analytical codes) separately from Open codes (granular codes)
+        const tags = getPropValue(page, ['Tags', 'Row tags'], 'multi_select', []);
+        const openCodes = getPropValue(page, 'Open codes', 'multi_select', []);
+
+        // Extract text excerpts defensively
+        const govComments = getPropValue(page, ['Governance Comments', 'Governance comments'], 'rich_text', '');
+        const favoritePart = getPropValue(page, ['Favorite Part', 'Favorite part'], 'rich_text', '');
+        const growthAreas = getPropValue(page, ['Areas of Growth', 'Areas of growth'], 'rich_text', '');
+        const barriers = getPropValue(page, ['Participation Barriers', 'Participation barriers'], 'rich_text', '');
+
+        // Build structured clean survey response object
+        return {
+          id: page.id,
+          anonName,
+          tenure,
+          fulfillment,
+          govSatisfaction,
+          likert: { q13, q14, q15, q16, q22, q23, q24 },
+          tags,
+          openCodes,
+          excerpts: {
+            govComments,
+            favoritePart,
+            growthAreas,
+            barriers
+          }
+        };
+      });
+    }
+
+    // Main App Component
+    function App() {
+      const [config, setConfig] = useState(() => {
+        const savedKey = localStorage.getItem('cvc_notion_key') || '';
+        const savedDb = localStorage.getItem('cvc_notion_db') || '';
+        return {
+          NOTION_API_KEY: savedKey,
+          NOTION_DATABASE_ID: savedDb,
+          PROXY_URL: CONFIG.PROXY_URL
+        };
+      });
+
+      const [useDemo, setUseDemo] = useState(() => {
+        const savedMode = localStorage.getItem('cvc_use_demo');
+        return savedMode === null ? true : savedMode === 'true';
+      });
+
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState(null);
+      const [rawData, setRawData] = useState([]);
+      const [showSettings, setShowSettings] = useState(false);
+      const [activeTab, setActiveTab] = useState('tag-frequency');
+
+      // Transform raw data when retrieved
+      const surveyData = useMemo(() => {
+        try {
+          return transformData(rawData);
+        } catch (e) {
+          console.error("Transformation Error:", e);
+          return [];
+        }
+      }, [rawData]);
+
+      // Load data helper
+      const loadSurveyData = async (currentConfig, currentUseDemo) => {
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await fetchData(currentConfig, currentUseDemo);
+          setRawData(data);
+          // If no data returned and not in demo, alert
+          if (data.length === 0 && !currentUseDemo) {
+            setError("No records found in the Notion database. Please verify your database and credentials.");
+          }
+        } catch (err) {
+          console.error("Load Error:", err);
+          setError(err.message || "Failed to load database. Ensure the local Express proxy is running on port 3001.");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // Initial load
+      useEffect(() => {
+        loadSurveyData(config, useDemo);
+      }, []);
+
+      const handleSaveSettings = (newConfig, newUseDemo) => {
+        setConfig(newConfig);
+        setUseDemo(newUseDemo);
+        localStorage.setItem('cvc_notion_key', newConfig.NOTION_API_KEY);
+        localStorage.setItem('cvc_notion_db', newConfig.NOTION_DATABASE_ID);
+        localStorage.setItem('cvc_use_demo', String(newUseDemo));
+        setShowSettings(false);
+        loadSurveyData(newConfig, newUseDemo);
+      };
+
+      return (
+        <div className="flex flex-col min-h-screen text-slate-700 bg-slate-50">
+          
+          {/* Dashboard Header */}
+          <header className="bg-slate-900 text-white shadow-lg sticky top-0 z-40 transition-all-300">
+            <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-emerald-500 text-slate-900 rounded-lg p-2 font-bold text-lg tracking-wider flex items-center justify-center shadow-inner leading-none select-none">
+                  CVC
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold tracking-tight">Survey Data Explorer</h1>
+                  <p className="text-xs text-slate-400 font-medium">Community Life Circle Dashboard</p>
+                </div>
+              </div>
+
+              {/* Controls and Indicators */}
+              <div className="flex items-center space-x-4">
+                {/* Data Source Indicator badge */}
+                <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center space-x-1.5 shadow-sm border ${
+                  useDemo 
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' 
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                }`}>
+                  <span className={`h-2 w-2 rounded-full ${useDemo ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-pulse'}`} />
+                  <span>{useDemo ? 'Demo Data' : 'Live Notion'}</span>
+                </div>
+
+                {/* Settings Gear Button */}
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white p-2 rounded-lg transition-colors border border-slate-700 hover:border-slate-600 focus:outline-none flex items-center justify-center"
+                  aria-label="Settings"
+                >
+                  <svg className="h-5 w-5 animate-[spin_8s_linear_infinite]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Navigation Bar */}
+          <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30 transition-all-300">
+            <div className="max-w-7xl mx-auto px-6">
+              <div className="flex space-x-8">
+                <button
+                  onClick={() => setActiveTab('tag-frequency')}
+                  className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                    activeTab === 'tag-frequency'
+                      ? 'border-emerald-500 text-emerald-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Tag Frequency
+                </button>
+                <button
+                  onClick={() => setActiveTab('tenure-arc')}
+                  className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                    activeTab === 'tenure-arc'
+                      ? 'border-emerald-500 text-emerald-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Tenure Arc
+                </button>
+                <button
+                  onClick={() => setActiveTab('satisfaction-grid')}
+                  className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                    activeTab === 'satisfaction-grid'
+                      ? 'border-emerald-500 text-emerald-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Fulfillment & Governance
+                </button>
+                <button
+                  onClick={() => setActiveTab('database-view')}
+                  className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                    activeTab === 'database-view'
+                      ? 'border-emerald-500 text-emerald-600'
+                      : 'border-transparent text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Database Viewer
+                </button>
+              </div>
+            </div>
+          </nav>
+
+          {/* Main Dashboard Content */}
+          <main className="flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col min-h-0 relative">
+            {error && (
+              <div className="mb-6 bg-rose-50 border-l-4 border-rose-500 text-rose-800 p-4 rounded-r-lg shadow-sm transition-all-300 flex items-start space-x-3">
+                <svg className="h-5 w-5 text-rose-500 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">Failed to Load Live Survey Data</p>
+                  <p className="text-xs text-rose-700 mt-1">{error}</p>
+                  <button 
+                    onClick={() => handleSaveSettings(config, true)}
+                    className="mt-2 text-xs font-semibold bg-rose-200/50 hover:bg-rose-200 text-rose-900 px-3 py-1 rounded transition-colors"
+                  >
+                    Switch back to Demo Data
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[400px]">
+                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-slate-700 mb-3"></div>
+                <p className="text-slate-500 text-sm font-medium">Fetching cohousing survey database...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col min-h-0">
+                {activeTab === 'tag-frequency' && <BubbleChartTab data={surveyData} />}
+                {activeTab === 'tenure-arc' && <TenureArcTab data={surveyData} />}
+                {activeTab === 'satisfaction-grid' && <FulfillmentGridTab data={surveyData} />}
+                {activeTab === 'database-view' && <DatabaseViewerTab rawData={rawData} surveyData={surveyData} />}
+              </div>
+            )}
+          </main>
+
+          {/* Settings Modal Component */}
+          {showSettings && (
+            <SettingsModal
+              config={config}
+              useDemo={useDemo}
+              onClose={() => setShowSettings(false)}
+              onSave={handleSaveSettings}
+            />
+          )}
+
+          {/* Premium Footer */}
+          <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 font-medium">
+            Champlain Valley Cohousing Survey Explorer • Designed for Skylar & Lauren
+          </footer>
+        </div>
+      );
+    }
+
+    // Settings Modal
+    function SettingsModal({ config, useDemo, onClose, onSave }) {
+      const [apiKey, setApiKey] = useState(config.NOTION_API_KEY);
+      const [dbId, setDbId] = useState(config.NOTION_DATABASE_ID);
+      const [proxyUrl, setProxyUrl] = useState(config.PROXY_URL);
+      const [demoToggle, setDemoToggle] = useState(useDemo);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave({
+          NOTION_API_KEY: apiKey.trim(),
+          NOTION_DATABASE_ID: dbId.trim(),
+          PROXY_URL: proxyUrl.trim()
+        }, demoToggle);
+      };
+
+      return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all-300">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100 transition-all-300 transform scale-100">
+            {/* Header */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-lg">Settings</h3>
+                <p className="text-xs text-slate-400 font-medium">Configure survey data source</p>
+              </div>
+              <button 
+                onClick={onClose}
+                className="text-slate-400 hover:text-white transition-colors focus:outline-none"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              
+              {/* Demo Mode Toggle */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex items-center justify-between">
+                <div>
+                  <label className="font-semibold text-sm text-slate-800 block">Use Preloaded Demo Data</label>
+                  <span className="text-xs text-slate-400 font-medium">Runs immediately without credentials</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDemoToggle(!demoToggle)}
+                  className={`w-12 h-6 rounded-full p-1 transition-colors-300 duration-200 focus:outline-none shrink-0 ${
+                    demoToggle ? 'bg-emerald-500 flex justify-end' : 'bg-slate-300 flex justify-start'
+                  }`}
+                >
+                  <div className="w-4 h-4 rounded-full bg-white shadow" />
+                </button>
+              </div>
+
+              {!demoToggle && (
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Notion API Integration Token</label>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="secret_xxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Notion Database ID</label>
+                    <input
+                      type="text"
+                      value={dbId}
+                      onChange={(e) => setDbId(e.target.value)}
+                      placeholder="a1b2c3d4e5f6..."
+                      className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Local Proxy URL</label>
+                    <input
+                      type="url"
+                      value={proxyUrl}
+                      onChange={(e) => setProxyUrl(e.target.value)}
+                      placeholder="http://localhost:3001/notion-data"
+                      className="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-500"
+                      required
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      CORS proxy must be running locally (`node proxy.js` on port 3001).
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="flex space-x-3 pt-3">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 text-slate-600 bg-slate-100 hover:bg-slate-200 font-semibold text-sm py-2.5 rounded-lg transition-colors border border-slate-200 focus:outline-none"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 text-white bg-slate-900 hover:bg-slate-800 font-semibold text-sm py-2.5 rounded-lg shadow transition-colors focus:outline-none"
+                >
+                  Load Data
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // TAB 1: Tag Frequency Bubble Chart
+    // ==========================================
+    const SUMMARY_TEXT_1 = "Each bubble represents one of 19 analytical codes applied to survey responses. Bubble size reflects how many respondents carry that code. Click any bubble to read anonymized excerpts from those respondents.";
+
+    function BubbleChartTab({ data }) {
+      const [selectedTag, setSelectedTag] = useState(null);
+      const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, tag: '', count: 0, type: '' });
+
+      // Process raw data into tag list (19 Row tags only, not Open codes)
+      const tagStats = useMemo(() => {
+        const stats = {};
+        ALL_TAGS.forEach(tag => {
+          stats[tag] = { name: tag, count: 0, type: THEME_TAGS.includes(tag) ? 'Theme' : 'Signal' };
+        });
+
+        data.forEach(d => {
+          if (Array.isArray(d.tags)) {
+            d.tags.forEach(tag => {
+              if (stats[tag]) {
+                stats[tag].count += 1;
+              }
+            });
+          }
+        });
+
+        return Object.values(stats);
+      }, [data]);
+
+      // Filter excerpts matching selected tag
+      const matchedExcerpts = useMemo(() => {
+        if (!selectedTag) return [];
+        return data
+          .filter(d => Array.isArray(d.tags) && d.tags.includes(selectedTag))
+          .map(d => ({
+            anonName: d.anonName,
+            excerpts: d.excerpts
+          }));
+      }, [selectedTag, data]);
+
+      return (
+        <div className="flex flex-col md:flex-row gap-6 min-h-0 max-h-[85vh]">
+
+          {/* Main Visual Card */}
+          <div className="flex-1 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 flex flex-col min-h-0 relative">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-800">Tag Frequency Bubble Chart</h2>
+              <p className="text-xs text-slate-400 font-semibold mb-3">Exploring "What Was Talked About" in cohousing life</p>
+              
+              {/* Summary panel */}
+              <div className="bg-slate-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-slate-600 text-sm mb-4 leading-relaxed">
+                {SUMMARY_TEXT_1}
+              </div>
+            </div>
+
+            {/* Bubble Chart Canvas Container */}
+            <div className="relative" style={{ height: '500px' }}>
+              <BubbleChart 
+                tagData={tagStats}
+                selectedTag={selectedTag}
+                onSelectTag={setSelectedTag}
+                setTooltip={setTooltip}
+              />
+            </div>
+
+            {/* Custom React Tooltip */}
+            {tooltip.show && (
+              <div 
+                className="absolute bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none z-30 transition-all border border-slate-700 max-w-[200px]"
+                style={{ left: `${tooltip.x + 10}px`, top: `${tooltip.y + 10}px` }}
+              >
+                <div className="font-bold border-b border-slate-700 pb-1 mb-1 tracking-wide flex justify-between">
+                  <span>{tooltip.tag}</span>
+                </div>
+                <div className="flex justify-between space-x-4 mb-0.5">
+                  <span className="text-slate-400 font-semibold">Category:</span>
+                  <span className={`font-semibold ${tooltip.type === 'Theme' ? 'text-indigo-400' : 'text-rose-400'}`}>{tooltip.type}</span>
+                </div>
+                <div className="flex justify-between space-x-4">
+                  <span className="text-slate-400 font-semibold">Count:</span>
+                  <span className="font-bold text-emerald-400">{tooltip.count} respondents</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Excerpt panel (Slide out style or persistent depending on state) */}
+          <ExcerptPanel 
+            tagName={selectedTag} 
+            excerpts={matchedExcerpts}
+            onClose={() => setSelectedTag(null)}
+          />
+        </div>
+      );
+    }
+
+    // D3 Force Directed Bubble Chart Component
+    function BubbleChart({ tagData, selectedTag, onSelectTag, setTooltip }) {
+      const containerRef = useRef(null);
+      const svgRef = useRef(null);
+
+      useEffect(() => {
+        if (!containerRef.current || !svgRef.current) return;
+
+        const container = containerRef.current;
+        const svg = d3.select(svgRef.current);
+        svg.selectAll("*").remove(); // Clear previous drawing
+
+        // Track current dimensions in a mutable object so tick/resize closures stay current
+        const dims = { w: container.clientWidth || 600, h: container.clientHeight || 500 };
+
+        svg.attr("width", dims.w).attr("height", dims.h);
+
+        // Filter out zero-count tags to keep display clean and dense
+        const dataset = tagData.filter(d => d.count > 0);
+
+        if (dataset.length === 0) {
+          svg.append("text")
+            .attr("x", dims.w / 2)
+            .attr("y", dims.h / 2)
+            .attr("text-anchor", "middle")
+            .attr("class", "text-slate-400 font-semibold text-sm")
+            .text("No survey responses with codes matches currently.");
+          return;
+        }
+
+        // Radii scale area-proportional
+        const counts = dataset.map(d => d.count);
+        const radiusScale = d3.scaleSqrt()
+          .domain([1, d3.max(counts) || 1])
+          .range([30, 65]);
+
+        // Pack the data inside D3 force nodes — initialize positions at center
+        const nodes = dataset.map((d, i) => ({
+          ...d,
+          radius: radiusScale(d.count),
+          x: dims.w / 2 + (Math.random() - 0.5) * 50,
+          y: dims.h / 2 + (Math.random() - 0.5) * 50
+        }));
+
+        // Centering forces pull nodes toward the middle of the canvas
+        const forceX = d3.forceX(dims.w / 2).strength(0.2);
+        const forceY = d3.forceY(dims.h / 2).strength(0.2);
+
+        // Collision force with iterations to fully resolve overlaps
+        const collideForce = d3.forceCollide(d => d.radius + 5).iterations(4);
+
+        // Simulation setup
+        const simulation = d3.forceSimulation(nodes)
+          .force("x", forceX)
+          .force("y", forceY)
+          .force("collide", collideForce)
+          .alphaMin(0.001)
+          .velocityDecay(0.3);
+
+        // Circle groups
+        const elem = svg.selectAll("g")
+          .data(nodes)
+          .enter()
+          .append("g")
+          .style("cursor", "pointer")
+          .on("click", (event, d) => {
+            onSelectTag(d.name);
+            // Selected node brief pulse animation
+            d3.select(event.currentTarget).select("circle")
+              .transition()
+              .duration(150)
+              .attr("transform", "scale(1.2)")
+              .transition()
+              .duration(150)
+              .attr("transform", "scale(1)");
+          })
+          .on("mousemove", (event, d) => {
+            const bounds = container.getBoundingClientRect();
+            const x = event.clientX - bounds.left;
+            const y = event.clientY - bounds.top;
+            setTooltip({
+              show: true,
+              x,
+              y,
+              tag: d.name,
+              count: d.count,
+              type: d.type
+            });
+          })
+          .on("mouseleave", () => {
+            setTooltip(prev => ({ ...prev, show: false }));
+          });
+
+        // Background gradients for nodes
+        const defs = svg.append("defs");
+        
+        // Define Theme Gradient (Indigo/Violet)
+        const themeGrad = defs.append("linearGradient").attr("id", "themeGrad").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
+        themeGrad.append("stop").attr("offset", "0%").attr("stop-color", "#6366f1");
+        themeGrad.append("stop").attr("offset", "100%").attr("stop-color", "#8b5cf6");
+
+        // Define Signal Gradient (Rose/Amber)
+        const signalGrad = defs.append("linearGradient").attr("id", "signalGrad").attr("x1", "0%").attr("y1", "0%").attr("x2", "100%").attr("y2", "100%");
+        signalGrad.append("stop").attr("offset", "0%").attr("stop-color", "#f43f5e");
+        signalGrad.append("stop").attr("offset", "100%").attr("stop-color", "#f59e0b");
+
+        // Render SVG Circles
+        const circles = elem.append("circle")
+          .attr("r", d => d.radius)
+          .attr("class", "shadow-sm hover:brightness-105 transition-all duration-300 origin-center")
+          .attr("fill", d => d.type === 'Theme' ? 'url(#themeGrad)' : 'url(#signalGrad)')
+          .attr("stroke", "transparent")
+          .attr("stroke-width", 0);
+
+        // Render Labels (Tag Name + count)
+        elem.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", "-2")
+          .attr("fill", "white")
+          .attr("class", "font-bold select-none pointer-events-none")
+          .style("font-size", d => `${Math.min(d.radius / 4.2, 12)}px`)
+          .text(d => {
+            const limit = Math.floor(d.radius / 3.5);
+            return d.name.length > limit ? d.name.substring(0, limit - 2) + ".." : d.name;
+          });
+
+        elem.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", "12")
+          .attr("fill", "rgba(255, 255, 255, 0.85)")
+          .attr("class", "font-medium select-none pointer-events-none")
+          .style("font-size", d => `${Math.min(d.radius / 4.8, 10)}px`)
+          .text(d => `n=${d.count}`);
+
+        // Update positions based on force simulation ticks
+        simulation.on("tick", () => {
+          elem.attr("transform", d => {
+            // Soft clamping using current dims — don't fight collision force
+            const margin = d.radius;
+            d.x = Math.max(margin, Math.min(dims.w - margin, d.x));
+            d.y = Math.max(margin, Math.min(dims.h - margin, d.y));
+            return `translate(${d.x}, ${d.y})`;
+          });
+        });
+
+        // Resize observer — update dims, re-center and restart simulation
+        const handleResize = () => {
+          if (!containerRef.current) return;
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          if (w === 0 || h === 0) return;
+          dims.w = w;
+          dims.h = h;
+          svg.attr("width", w).attr("height", h);
+          simulation.force("x", d3.forceX(w / 2).strength(0.2));
+          simulation.force("y", d3.forceY(h / 2).strength(0.2));
+          simulation.alpha(0.8).restart();
+        };
+
+        const resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(container);
+
+        return () => {
+          simulation.stop();
+          resizeObserver.disconnect();
+        };
+      }, [tagData]);
+
+      // Highlight selected bubble without rebuilding simulation
+      useEffect(() => {
+        if (!svgRef.current) return;
+        const svg = d3.select(svgRef.current);
+        svg.selectAll("circle")
+          .attr("stroke", function(d) { return d && d.name === selectedTag ? '#0f172a' : 'transparent'; })
+          .attr("stroke-width", function(d) { return d && d.name === selectedTag ? 3 : 0; });
+      }, [selectedTag]);
+
+      return (
+        <div ref={containerRef} className="viz-bubble-chart w-full absolute inset-0">
+          <svg ref={svgRef} className="w-full h-full select-none" />
+        </div>
+      );
+    }
+
+    // Slide-out Excerpt Panel component for Bubble Chart
+    function ExcerptPanel({ tagName, excerpts, onClose }) {
+      if (!tagName) return null;
+
+      const isSmallGroup = excerpts.length <= 3;
+
+      return (
+        <div className="viz-sidebar-wrapper w-full md:w-[420px] bg-white rounded-2xl border border-slate-200/60 shadow-lg p-6 flex flex-col shrink-0 min-h-0 max-h-[85vh] overflow-y-auto">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <span className={`h-2.5 w-2.5 rounded-full ${THEME_TAGS.includes(tagName) ? 'bg-accent-indigo' : 'bg-accent-rose'}`} />
+                <h3 className="font-bold text-lg text-slate-800 leading-tight">{tagName}</h3>
+              </div>
+              <p className="text-xs text-slate-400 font-medium mt-1">Showing {excerpts.length} respondent excerpts</p>
+            </div>
+            <button 
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-800 transition-colors p-1 rounded-lg focus:outline-none"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Small Group Warning Alert */}
+
+          {/* Excerpts List container */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 no-scrollbar">
+            {excerpts.map((item, idx) => {
+              // Collect non-empty paragraphs
+              const comments = [];
+              if (item.excerpts.govComments) comments.push({ label: 'Governance Comments', text: item.excerpts.govComments });
+              if (item.excerpts.favoritePart) comments.push({ label: 'Favorite Part of Cohousing', text: item.excerpts.favoritePart });
+              if (item.excerpts.growthAreas) comments.push({ label: 'Areas of Growth', text: item.excerpts.growthAreas });
+              if (item.excerpts.barriers) comments.push({ label: 'Participation Barriers', text: item.excerpts.barriers });
+
+              return (
+                <div key={idx} className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 shadow-sm hover:border-slate-300/80 transition-all duration-200">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="font-bold text-xs bg-slate-900 text-white px-2 py-0.5 rounded-md tracking-wider">
+                      {item.anonName}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase">Excerpts Block</span>
+                  </div>
+
+                  {comments.length === 0 ? (
+                    <p className="text-slate-400 italic text-xs">No responses provided for comments fields.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {comments.map((c, cidx) => (
+                        <div key={cidx} className="border-t border-slate-200/50 pt-2.5 first:border-0 first:pt-0">
+                          <span className="text-[10px] font-bold text-emerald-600 block mb-0.5">{c.label}</span>
+                          <p className="text-slate-700 text-xs leading-relaxed font-normal bg-white p-2.5 rounded-lg border border-slate-100 italic">
+                            "{c.text}"
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // TAB 2: Tenure Arc (Experience Changes Over Time)
+    // ==========================================
+    const SUMMARY_TEXT_2 = "Each dot represents one survey question, plotted by mean score for the selected tenure group. Use the tenure selector to step through groups and watch how scores shift. Dots that move left indicate declining experience over time.";
+
+    const LIKERT_QUESTIONS = {
+      q13: { code: 'Q13', shortName: 'Q13: Sense of Belonging', fullName: 'I feel a strong sense of belonging at Champlain Valley Cohousing.' },
+      q14: { code: 'Q14', shortName: 'Q14: Voice in Plenaries', fullName: 'I feel heard and respected during community plenaries and discussions.' },
+      q15: { code: 'Q15', shortName: 'Q15: Consensus Fairness', fullName: 'Decisions are made in a transparent, consensus-oriented, and fair manner.' },
+      q16: { code: 'Q16', shortName: 'Q16: Equitable Chore Share', fullName: 'Community work and chore rotations are shared equitably.' },
+      q22: { code: 'Q22', shortName: 'Q22: Trust in Governance', fullName: 'I trust our governance circles to make decisions in the community\'s best interest.' },
+      q23: { code: 'Q23', shortName: 'Q23: Circle Communication', fullName: 'Communication between different circles (Life, Land, Governance) is clear.' },
+      q24: { code: 'Q24', shortName: 'Q24: Neighborhood Support', fullName: 'I feel supported by my neighbors during challenging times.' }
+    };
+
+    const TENURE_GROUPS = ["0-2 yrs", "3-5 yrs", "6-10 yrs", "10+ yrs"];
+
+    // Distinct D3 colors for each question so we can track them in animation
+    const QUESTION_COLORS = {
+      q13: '#4e79a7', // Blue
+      q14: '#f28e2b', // Orange
+      q15: '#e15759', // Red
+      q16: '#76b7b2', // Teal
+      q22: '#59a14f', // Green
+      q23: '#edc948', // Yellow
+      q24: '#b07aa1'  // Purple
+    };
+
+    function TenureArcTab({ data }) {
+      const [selectedTenure, setSelectedTenure] = useState("0-2 yrs");
+      const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, code: '', fullText: '', score: 0, n: 0 });
+
+      // Group data by tenure and calculate count
+      const tenureCounts = useMemo(() => {
+        const counts = { "0-2 yrs": 0, "3-5 yrs": 0, "6-10 yrs": 0, "10+ yrs": 0 };
+        data.forEach(d => {
+          if (counts[d.tenure] !== undefined) counts[d.tenure] += 1;
+        });
+        return counts;
+      }, [data]);
+
+      // Calculate mean scores specifically for the active tenure group
+      const scoresForTenure = useMemo(() => {
+        const result = {};
+        
+        // Filter respondents in this tenure group
+        const groupMembers = data.filter(d => d.tenure === selectedTenure);
+        const n = groupMembers.length;
+
+        Object.keys(LIKERT_QUESTIONS).forEach(qKey => {
+          if (n === 0) {
+            result[qKey] = { qKey, score: 3.0, n: 0 }; // default
+            return;
+          }
+
+          const sum = groupMembers.reduce((acc, current) => acc + (current.likert[qKey] || 3), 0);
+          const mean = Number((sum / n).toFixed(2));
+          result[qKey] = { qKey, score: mean, n };
+        });
+
+        return Object.values(result);
+      }, [data, selectedTenure]);
+
+      return (
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 flex flex-col min-h-0 max-h-[85vh] relative">
+
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-800">Tenure Arc Experience Chart</h2>
+              <p className="text-xs text-slate-400 font-semibold">How community life ratings evolve over time</p>
+            </div>
+
+            {/* Tenure Segmented Control Selector */}
+            <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50">
+              {TENURE_GROUPS.map((grp) => (
+                <button
+                  key={grp}
+                  onClick={() => setSelectedTenure(grp)}
+                  className={`px-4 py-2 text-xs font-bold rounded-lg transition-all duration-300 flex items-center space-x-1 focus:outline-none ${
+                    selectedTenure === grp
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <span>{grp}</span>
+                  <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded text-slate-500 font-medium">n={tenureCounts[grp]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Orientation Summary Block */}
+          <div className="bg-slate-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-slate-600 text-sm mb-6 leading-relaxed">
+            {SUMMARY_TEXT_2}
+          </div>
+
+          {/* Canvas Dot Plot Area */}
+          <div className="relative min-h-[400px] overflow-y-auto">
+            <TenureDotPlot 
+              scores={scoresForTenure}
+              setTooltip={setTooltip}
+            />
+          </div>
+
+          {/* Custom Tooltip */}
+          {tooltip.show && (
+            <div 
+              className="absolute bg-slate-900/95 text-white text-xs rounded-xl p-4 shadow-xl pointer-events-none z-30 transition-all border border-slate-700 max-w-[280px]"
+              style={{ left: `${tooltip.x + 10}px`, top: `${tooltip.y + 10}px` }}
+            >
+              <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 flex justify-between items-center text-xs tracking-wide">
+                <span>{tooltip.code} - {tooltip.fullText}</span>
+                <span className="text-[10px] bg-emerald-500 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">{tooltip.n}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-800 pt-1.5">
+                <span className="text-slate-400 font-semibold">Mean score:</span>
+                <span className="font-bold text-emerald-400 text-sm">{tooltip.score} / 5.0</span>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // D3 Horizontal Dot Plot
+    function TenureDotPlot({ scores, setTooltip }) {
+      const containerRef = useRef(null);
+      const svgRef = useRef(null);
+
+      useEffect(() => {
+        if (!containerRef.current || !svgRef.current) return;
+
+        const container = containerRef.current;
+        const svg = d3.select(svgRef.current);
+
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        const margin = { top: 20, right: 40, bottom: 40, left: 180 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+
+        // Check if size has actually changed to avoid full redraw
+        const prevWidth = svg.attr("data-width");
+        const prevHeight = svg.attr("data-height");
+        const sizeChanged = prevWidth !== String(width) || prevHeight !== String(height);
+
+        // Scales
+        const xScale = d3.scaleLinear()
+          .domain([1.0, 5.0])
+          .range([0, chartWidth]);
+
+        const yScale = d3.scalePoint()
+          .domain(Object.keys(LIKERT_QUESTIONS))
+          .range([0, chartHeight])
+          .padding(0.5);
+
+        let g;
+
+        if (sizeChanged) {
+          svg.selectAll("*").remove(); // Only wipe on resize
+          svg.attr("data-width", width).attr("data-height", height);
+          svg.attr("width", width).attr("height", height);
+
+          g = svg.append("g")
+            .attr("class", "main-group")
+            .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+          // Add background guides / gridlines for orientation
+          g.append("g")
+            .attr("class", "grid text-slate-200")
+            .attr("transform", `translate(0, ${chartHeight})`)
+            .call(d3.axisBottom(xScale).ticks(5).tickSize(-chartHeight))
+            .call(g => g.select(".domain").remove())
+            .call(g => g.selectAll(".tick line").attr("stroke", "#e2e8f0").attr("stroke-dasharray", "4,4"));
+
+          // Add fixed reference line at 3.0 (Neutral threshold)
+          g.append("line")
+            .attr("class", "ref-line")
+            .attr("x1", xScale(3.0))
+            .attr("x2", xScale(3.0))
+            .attr("y1", 0)
+            .attr("y2", chartHeight)
+            .attr("stroke", "#94a3b8")
+            .attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", "6,4")
+            .style("opacity", 0.7);
+
+          // Y-Axis labels (Question Codes / short labels)
+          g.append("g")
+            .attr("class", "y-axis text-slate-600 font-semibold select-none")
+            .call(d3.axisLeft(yScale).tickFormat(d => LIKERT_QUESTIONS[d].shortName))
+            .call(g => g.select(".domain").remove())
+            .call(g => g.selectAll(".tick line").remove())
+            .selectAll("text")
+            .style("font-size", "11px");
+
+          // X-Axis labels
+          g.append("g")
+            .attr("class", "x-axis text-slate-400 font-bold select-none")
+            .attr("transform", `translate(0, ${chartHeight})`)
+            .call(d3.axisBottom(xScale).tickValues([1, 2, 3, 4, 5]).tickFormat(d => {
+              const labels = { 1: 'Strong Disagree (1)', 2: '2', 3: '3 (Neutral)', 4: '4', 5: 'Strong Agree (5)' };
+              return labels[d];
+            }))
+            .selectAll("text")
+            .style("font-size", "10px")
+            .attr("dy", "10");
+
+          // Render question row horizontal background lanes for cleaner scanning
+          // Set background lane stroke-width to 20 for a gorgeous thick track layout!
+          g.selectAll(".lane")
+            .data(Object.keys(LIKERT_QUESTIONS))
+            .enter()
+            .append("line")
+            .attr("class", "lane")
+            .attr("x1", 0)
+            .attr("x2", chartWidth)
+            .attr("y1", d => yScale(d))
+            .attr("y2", d => yScale(d))
+            .attr("stroke", "#f1f5f9")
+            .attr("stroke-width", yScale.step() * 0.6)
+            .style("opacity", 0.5)
+            .style("z-index", -1);
+        } else {
+          g = svg.select("g.main-group");
+        }
+
+        // Draw and update animated score dots
+        const dots = g.selectAll(".score-dot")
+          .data(scores, d => d.qKey);
+
+        dots.enter()
+          .append("circle")
+          .attr("class", "score-dot cursor-pointer shadow-md origin-center transition-all duration-200")
+          .attr("r", 11)
+          .attr("fill", d => QUESTION_COLORS[d.qKey])
+          .attr("cy", d => yScale(d.qKey))
+          .attr("cx", d => xScale(d.score))
+          .on("mousemove", (event, d) => {
+            const bounds = container.getBoundingClientRect();
+            const x = event.clientX - bounds.left;
+            const y = event.clientY - bounds.top;
+            setTooltip({
+              show: true,
+              x,
+              y,
+              code: LIKERT_QUESTIONS[d.qKey].code,
+              fullText: LIKERT_QUESTIONS[d.qKey].fullName,
+              score: d.score,
+              n: d.n
+            });
+          })
+          .on("mouseleave", () => {
+            setTooltip(prev => ({ ...prev, show: false }));
+          })
+          .merge(dots)
+          .transition()
+          .duration(650)
+          .ease(d3.easeCubicInOut)
+          .attr("cx", d => xScale(d.score));
+
+        dots.exit().remove();
+
+        // Resize observer handler to dynamically adjust on window shifts
+        const handleResize = () => {
+          if (!containerRef.current) return;
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          svg.attr("data-width", w).attr("data-height", h);
+          svg.attr("width", w).attr("height", h);
+          const cW = w - margin.left - margin.right;
+          const cH = h - margin.top - margin.bottom;
+
+          xScale.range([0, cW]);
+          yScale.range([0, cH]);
+
+          svg.selectAll(".lane").attr("x2", cW);
+          svg.select(".grid").selectAll("line").attr("x2", cW);
+          svg.select(".ref-line")
+            .attr("x1", xScale(3.0))
+            .attr("x2", xScale(3.0))
+            .attr("y2", cH);
+
+          g.selectAll(".score-dot")
+            .attr("cx", d => xScale(d.score))
+            .attr("cy", d => yScale(d.qKey));
+        };
+
+        const resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(container);
+
+        return () => resizeObserver.disconnect();
+      }, [scores]);
+
+      return (
+        <div ref={containerRef} className="viz-tenure-arc w-full h-full">
+          <svg ref={svgRef} className="w-full h-full" />
+        </div>
+      );
+    }
+
+    // ==========================================
+    // TAB 3: Fulfillment vs Governance satisfaction
+    // ==========================================
+    const SUMMARY_TEXT_3 = "Each cell shows how many respondents fall at the intersection of their overall fulfillment with CVC life and their satisfaction with governance. The distribution across cells reveals whether these two measures move together or independently.";
+
+    const FULFILLMENT_LEVELS = ["Yes", "Somewhat", "No"];
+    const SATISFACTION_LEVELS = ["Very satisfied", "Somewhat satisfied", "Somewhat dissatisfied", "Not at all satisfied"];
+
+    // Mapping matrix diagonal cells programmatically (High + High, Low + Low)
+    const DIAGONAL_CELLS = [
+      "Yes|Very satisfied",
+      "Yes|Somewhat satisfied",
+      "Somewhat|Somewhat satisfied",
+      "Somewhat|Somewhat dissatisfied",
+      "No|Somewhat dissatisfied",
+      "No|Not at all satisfied"
+    ];
+
+    function FulfillmentGridTab({ data }) {
+      const [selectedCell, setSelectedCell] = useState(null); // 'fulfillment|satisfaction'
+      const [tooltip, setTooltip] = useState({ show: false, x: 0, y: 0, count: 0, ful: '', sat: '' });
+
+      // Transform raw dataset into 2D Grid Cell stats
+      const gridStats = useMemo(() => {
+        // Initialize cells
+        const matrix = {};
+        FULFILLMENT_LEVELS.forEach(f => {
+          SATISFACTION_LEVELS.forEach(s => {
+            matrix[`${f}|${s}`] = {
+              fulfillment: f,
+              satisfaction: s,
+              count: 0,
+              respondents: [],
+              tags: {}
+            };
+          });
+        });
+
+        // Populate cell lists
+        data.forEach(d => {
+          const key = `${d.fulfillment}|${d.govSatisfaction}`;
+          if (matrix[key]) {
+            matrix[key].count += 1;
+            matrix[key].respondents.push(d);
+            
+            // Increment tag counters
+            if (Array.isArray(d.tags)) {
+              d.tags.forEach(tag => {
+                matrix[key].tags[tag] = (matrix[key].tags[tag] || 0) + 1;
+              });
+            }
+          }
+        });
+
+        return Object.values(matrix);
+      }, [data]);
+
+      // Active cell information
+      const activeCellData = useMemo(() => {
+        if (!selectedCell) return null;
+        return gridStats.find(cell => `${cell.fulfillment}|${cell.satisfaction}` === selectedCell);
+      }, [selectedCell, gridStats]);
+
+      return (
+        <div className="flex flex-col md:flex-row gap-6 min-h-0 max-h-[85vh]">
+
+          {/* Main Visual grid Card */}
+          <div className="flex-1 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 flex flex-col min-h-0 relative">
+            <div>
+              <h2 className="text-xl font-bold tracking-tight text-slate-800">Fulfillment vs Governance Satisfaction</h2>
+              <p className="text-xs text-slate-400 font-semibold mb-3">Comparing emotional satisfaction against political processes</p>
+              
+              {/* Summary panel */}
+              <div className="bg-slate-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-slate-600 text-sm mb-4 leading-relaxed">
+                {SUMMARY_TEXT_3}
+              </div>
+            </div>
+
+            {/* Matrix Canvas Container */}
+            <div className="flex-1 relative min-h-[350px]">
+              <FulfillmentGrid 
+                cells={gridStats}
+                selectedCell={selectedCell}
+                onSelectCell={setSelectedCell}
+                setTooltip={setTooltip}
+              />
+            </div>
+
+            {/* Custom Tooltip */}
+            {tooltip.show && (
+              <div 
+                className="absolute bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none z-30 transition-all border border-slate-700 max-w-[220px]"
+                style={{ left: `${tooltip.x + 10}px`, top: `${tooltip.y + 10}px` }}
+              >
+                <div className="font-bold border-b border-slate-700 pb-1 mb-1.5 tracking-wide text-xs">
+                  Intersection Profile
+                </div>
+                <div className="space-y-1 mb-2">
+                  <div className="flex justify-between space-x-2">
+                    <span className="text-slate-400 font-semibold">Fulfillment:</span>
+                    <span className="font-bold text-white">{tooltip.ful}</span>
+                  </div>
+                  <div className="flex justify-between space-x-2">
+                    <span className="text-slate-400 font-semibold">Governance:</span>
+                    <span className="font-bold text-white">{tooltip.sat}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between border-t border-slate-800 pt-1.5">
+                  <span className="text-slate-400 font-semibold">Count:</span>
+                  <span className="font-bold text-emerald-400">{tooltip.count} respondents</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Profile details pane */}
+          <TagProfilePanel 
+            cellData={activeCellData}
+            onClose={() => setSelectedCell(null)}
+          />
+        </div>
+      );
+    }
+
+    // D3 fulfillment matrix grid chart
+    function FulfillmentGrid({ cells, selectedCell, onSelectCell, setTooltip }) {
+      const containerRef = useRef(null);
+      const svgRef = useRef(null);
+
+      useEffect(() => {
+        if (!containerRef.current || !svgRef.current) return;
+
+        const container = containerRef.current;
+        const svg = d3.select(svgRef.current);
+        svg.selectAll("*").remove(); // Clear previous drawing
+
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        const margin = { top: 30, right: 40, bottom: 60, left: 100 };
+        const chartWidth = width - margin.left - margin.right;
+        const chartHeight = height - margin.top - margin.bottom;
+
+        svg.attr("width", width).attr("height", height);
+
+        const g = svg.append("g")
+          .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+        // Scales
+        const xScale = d3.scalePoint()
+          .domain(SATISFACTION_LEVELS)
+          .range([0, chartWidth])
+          .padding(0.5);
+
+        const yScale = d3.scalePoint()
+          .domain(FULFILLMENT_LEVELS)
+          .range([0, chartHeight])
+          .padding(0.5);
+
+        // Maximum size of circle (half the spacing between points)
+        const maxCircleRadius = Math.min(chartWidth / SATISFACTION_LEVELS.length, chartHeight / FULFILLMENT_LEVELS.length) * 0.4;
+
+        // Radius Scale mapped area-accurately
+        const counts = cells.map(c => c.count);
+        const radiusScale = d3.scaleSqrt()
+          .domain([0, d3.max(counts) || 1])
+          .range([3, maxCircleRadius]); // minimum 3px for outlines to preserve structure
+
+        // Draw Matrix grid line intersections
+        g.selectAll(".grid-line-x")
+          .data(FULFILLMENT_LEVELS)
+          .enter()
+          .append("line")
+          .attr("x1", 0)
+          .attr("x2", chartWidth)
+          .attr("y1", d => yScale(d))
+          .attr("y2", d => yScale(d))
+          .attr("stroke", "#f1f5f9")
+          .attr("stroke-width", 2);
+
+        g.selectAll(".grid-line-y")
+          .data(SATISFACTION_LEVELS)
+          .enter()
+          .append("line")
+          .attr("x1", d => xScale(d))
+          .attr("x2", d => xScale(d))
+          .attr("y1", 0)
+          .attr("y2", chartHeight)
+          .attr("stroke", "#f1f5f9")
+          .attr("stroke-width", 2);
+
+        // Y-Axis Labels
+        g.append("g")
+          .attr("class", "text-slate-500 font-bold select-none")
+          .call(d3.axisLeft(yScale))
+          .call(g => g.select(".domain").remove())
+          .call(g => g.selectAll(".tick line").remove())
+          .selectAll("text")
+          .style("font-size", "11px");
+
+        // X-Axis Labels
+        g.append("g")
+          .attr("class", "text-slate-500 font-bold select-none")
+          .attr("transform", `translate(0, ${chartHeight})`)
+          .call(d3.axisBottom(xScale))
+          .call(g => g.select(".domain").remove())
+          .call(g => g.selectAll(".tick line").remove())
+          .selectAll("text")
+          .style("font-size", "11px")
+          .attr("dy", "10")
+          .call(g => {
+            // Adjust X axis labels text wrap or angle if screen is small
+            if (width < 500) {
+              g.attr("transform", "rotate(-15)").style("text-anchor", "end");
+            }
+          });
+
+        // Label Axes headers
+        svg.append("text")
+          .attr("x", margin.left - 15)
+          .attr("y", margin.top - 15)
+          .attr("class", "text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right")
+          .text("Fulfillment");
+
+        svg.append("text")
+          .attr("x", width - margin.right)
+          .attr("y", chartHeight + margin.top + 45)
+          .attr("class", "text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right")
+          .text("Governance Satisfaction");
+
+        // Cell circles groups
+        const nodes = g.selectAll(".matrix-node")
+          .data(cells)
+          .enter()
+          .append("g")
+          .attr("class", "matrix-node")
+          .attr("transform", d => `translate(${xScale(d.satisfaction)}, ${yScale(d.fulfillment)})`)
+          .style("cursor", "pointer")
+          .on("click", (event, d) => {
+            const cellKey = `${d.fulfillment}|${d.satisfaction}`;
+            onSelectCell(cellKey === selectedCell ? null : cellKey);
+
+            // Pulse transition animation on click
+            d3.select(event.currentTarget).select("circle")
+              .transition()
+              .duration(150)
+              .attr("transform", "scale(1.25)")
+              .transition()
+              .duration(150)
+              .attr("transform", "scale(1)");
+          })
+          .on("mousemove", (event, d) => {
+            const bounds = container.getBoundingClientRect();
+            const x = event.clientX - bounds.left;
+            const y = event.clientY - bounds.top;
+            setTooltip({
+              show: true,
+              x,
+              y,
+              count: d.count,
+              ful: d.fulfillment,
+              sat: d.satisfaction
+            });
+          })
+          .on("mouseleave", () => {
+            setTooltip(prev => ({ ...prev, show: false }));
+          });
+
+        // Programmatic cell styling: Diagonal = Slate gray, Off-diagonal = energetic accent (Tangerine)
+        const getCellFill = (d) => {
+          const key = `${d.fulfillment}|${d.satisfaction}`;
+          const isDiagonal = DIAGONAL_CELLS.includes(key);
+
+          if (d.count === 0) return 'none';
+          
+          if (selectedCell === key) {
+            return isDiagonal ? '#334155' : '#ea580c'; // Highlighted active
+          }
+          return isDiagonal ? '#64748b' : '#f97316'; // standard
+        };
+
+        const getCellStroke = (d) => {
+          const key = `${d.fulfillment}|${d.satisfaction}`;
+          const isDiagonal = DIAGONAL_CELLS.includes(key);
+          if (d.count === 0) return '#cbd5e1'; // small grey circle outlines for structural grid integrity
+          return selectedCell === key ? '#0f172a' : 'transparent';
+        };
+
+        // Render cell circles
+        nodes.append("circle")
+          .attr("r", 0) // start radius 0 for zoom entrance animation
+          .attr("fill", getCellFill)
+          .attr("stroke", getCellStroke)
+          .attr("stroke-width", d => d.count === 0 ? 1 : 2.5)
+          .attr("stroke-dasharray", d => d.count === 0 ? "3,3" : "none")
+          .attr("class", "transition-all duration-300 origin-center")
+          .transition()
+          .delay((d, idx) => idx * 25) // Staggered delays
+          .duration(500)
+          .attr("r", d => d.count === 0 ? 4 : radiusScale(d.count));
+
+        // Text count labels inside circles
+        nodes.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", "3.5")
+          .attr("fill", "white")
+          .attr("class", "font-bold text-xs select-none pointer-events-none")
+          .style("opacity", d => d.count > 0 ? 1.0 : 0)
+          .text(d => d.count);
+
+        // Resize handler
+        const handleResize = () => {
+          if (!containerRef.current) return;
+          const w = containerRef.current.clientWidth;
+          const h = containerRef.current.clientHeight;
+          svg.attr("width", w).attr("height", h);
+          const cW = w - margin.left - margin.right;
+          const cH = h - margin.top - margin.bottom;
+
+          xScale.range([0, cW]);
+          yScale.range([0, cH]);
+
+          // Re-align elements instantly
+          g.selectAll(".matrix-node").attr("transform", d => `translate(${xScale(d.satisfaction)}, ${yScale(d.fulfillment)})`);
+          g.selectAll(".grid-line-x").attr("x2", cW).attr("y1", d => yScale(d)).attr("y2", d => yScale(d));
+          g.selectAll(".grid-line-y").attr("x1", d => xScale(d)).attr("x2", d => xScale(d)).attr("y2", cH);
+        };
+
+        const resizeObserver = new ResizeObserver(handleResize);
+        resizeObserver.observe(container);
+
+        return () => resizeObserver.disconnect();
+
+      }, [cells, selectedCell]);
+
+      return (
+        <div ref={containerRef} className="viz-fulfillment-grid w-full h-full">
+          <svg ref={svgRef} className="w-full h-full" />
+        </div>
+      );
+    }
+
+    // Detail Panel showing analytical Tag profile inside intersection cell
+    function TagProfilePanel({ cellData, onClose }) {
+      if (!cellData) return null;
+
+      // Extract and sort tags inside selected matrix cell
+      const tagChartData = useMemo(() => {
+        const list = Object.entries(cellData.tags).map(([name, count]) => ({
+          name,
+          count,
+          type: THEME_TAGS.includes(name) ? 'Theme' : 'Signal'
+        }));
+
+        // Sort descending by count
+        return list.sort((a, b) => b.count - a.count);
+      }, [cellData]);
+
+      return (
+        <div className="viz-sidebar-wrapper w-full md:w-[420px] bg-white rounded-2xl border border-slate-200/60 shadow-lg p-6 flex flex-col shrink-0 min-h-0 max-h-[85vh] overflow-y-auto">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
+            <div>
+              <h3 className="font-bold text-lg text-slate-800 leading-tight">Cell Profile Details</h3>
+              <div className="mt-1 text-xs text-slate-400 font-semibold space-y-0.5">
+                <div>Fulfillment: <span className="text-slate-600 font-bold">{cellData.fulfillment}</span></div>
+                <div>Governance: <span className="text-slate-600 font-bold">{cellData.satisfaction}</span></div>
+              </div>
+            </div>
+            <button 
+              onClick={onClose}
+              className="text-slate-400 hover:text-slate-800 transition-colors p-1 rounded-lg focus:outline-none"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-5 no-scrollbar pr-1">
+            {/* Tag Frequencies Horizontal Bar Chart */}
+            <div>
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Tag Frequency Profile</h4>
+              {tagChartData.length === 0 ? (
+                <p className="text-slate-400 text-xs italic">No analytical codes mapped to this group.</p>
+              ) : (
+                <div className="space-y-2">
+                  {tagChartData.map((item, idx) => {
+                    const maxVal = tagChartData[0]?.count || 1;
+                    const percentWidth = Math.max(8, (item.count / maxVal) * 100);
+                    const isTheme = item.type === 'Theme';
+                    
+                    return (
+                      <div key={idx} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-slate-700 truncate">{item.name}</span>
+                          <span className="text-slate-400">n={item.count}</span>
+                        </div>
+                        <div className="h-4 bg-slate-100 rounded-md overflow-hidden flex shadow-inner">
+                          <div 
+                            className={`h-full rounded-md transition-all duration-500 shadow-sm ${
+                              isTheme 
+                                ? 'bg-gradient-to-r from-accent-indigo to-accent-violet' 
+                                : 'bg-gradient-to-r from-accent-rose to-accent-amber'
+                            }`}
+                            style={{ width: `${percentWidth}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* List of Respondents in Cell */}
+            <div className="border-t border-slate-100 pt-4">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Respondents in Cell (n={cellData.respondents.length})</h4>
+              <div className="flex flex-wrap gap-2">
+                {cellData.respondents.map((item, idx) => (
+                  <span 
+                    key={idx} 
+                    className="px-3 py-1 bg-slate-900 text-white rounded-lg text-xs font-bold shadow-sm tracking-wide"
+                  >
+                    {item.anonName}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Component to view and inspect raw Notion database entries
+    function DatabaseViewerTab({ rawData, surveyData }) {
+      const [searchTerm, setSearchTerm] = useState('');
+      const [viewMode, setViewMode] = useState('table'); // 'table' | 'json'
+      const [expandedRow, setExpandedRow] = useState(null);
+
+      // Helper to extract real name from page
+      const getRealName = (page) => {
+        return getPropValue(page, ['Name', 'Respondent'], 'title', 'Anonymous');
+      };
+
+      // Merge raw Notion records with their parsed/transformed equivalents
+      const mergedData = useMemo(() => {
+        if (!rawData) return [];
+        return rawData.map(rawPage => {
+          const transformed = surveyData.find(s => s.id === rawPage.id) || {};
+          return {
+            id: rawPage.id,
+            realName: getRealName(rawPage),
+            anonName: transformed.anonName || 'Pending...',
+            tenure: transformed.tenure || '0-2 yrs',
+            fulfillment: transformed.fulfillment || 'Somewhat',
+            govSatisfaction: transformed.govSatisfaction || 'Somewhat satisfied',
+            likert: transformed.likert || {},
+            tags: transformed.tags || [],
+            excerpts: transformed.excerpts || {},
+            raw: rawPage
+          };
+        });
+      }, [rawData, surveyData]);
+
+      // Filtered rows based on the search query
+      const filteredData = useMemo(() => {
+        if (!searchTerm.trim()) return mergedData;
+        const term = searchTerm.toLowerCase();
+        return mergedData.filter(item => {
+          return (
+            item.id.toLowerCase().includes(term) ||
+            item.realName.toLowerCase().includes(term) ||
+            item.anonName.toLowerCase().includes(term) ||
+            item.tenure.toLowerCase().includes(term) ||
+            item.fulfillment.toLowerCase().includes(term) ||
+            item.govSatisfaction.toLowerCase().includes(term) ||
+            item.tags.some(t => t.toLowerCase().includes(term)) ||
+            Object.values(item.excerpts).some(txt => txt.toLowerCase().includes(term))
+          );
+        });
+      }, [mergedData, searchTerm]);
+
+      // Render simple score with heatmap styling
+      const renderScore = (val) => {
+        if (val === undefined || val === null || isNaN(val)) return '-';
+        let colorClasses = 'bg-slate-100 text-slate-600 border-slate-200';
+        if (val >= 4) {
+          colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        } else if (val <= 2) {
+          colorClasses = 'bg-rose-50 text-rose-700 border-rose-200';
+        }
+        return (
+          <span className={`inline-flex items-center justify-center w-6 h-6 text-xs font-bold border rounded-md shadow-sm ${colorClasses}`}>
+            {val}
+          </span>
+        );
+      };
+
+      const toggleExpand = (id) => {
+        setExpandedRow(prev => prev === id ? null : id);
+      };
+
+      return (
+        <div className="flex-grow bg-white rounded-2xl p-6 shadow-sm border border-slate-200/60 flex flex-col min-h-0">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-100 pb-4 mb-6 gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Database Viewer</h2>
+              <p className="text-slate-400 text-xs mt-1 font-semibold">
+                Inspect raw data from Notion and cross-reference with anonymized entries
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-3 shrink-0">
+              {/* Toggle view mode */}
+              <div className="bg-slate-100 p-1 rounded-xl flex space-x-1 border border-slate-200/40">
+                <button
+                  onClick={() => setViewMode('table')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'table'
+                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Table Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('json')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'json'
+                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/20'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  Raw JSON
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Table Search & Help Callout */}
+          {viewMode === 'table' ? (
+            <div className="flex flex-col space-y-4 mb-6">
+              {/* Privacy Warning / Info */}
+              <div className="bg-amber-50 border-l-4 border-amber-500/80 p-3 rounded-r-xl text-amber-800 text-xs font-medium shadow-sm">
+                <div className="flex items-center space-x-1.5">
+                  <svg className="h-4 w-4 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="font-bold">Privacy & Verification Tool</span>
+                </div>
+                <p className="mt-1 text-amber-700 leading-relaxed">
+                  This tab displays real database names (e.g. "Sarah Jenkins") alongside anonymized pseudonyms (e.g. "Rowan-01") strictly for database validation. These original identities are kept fully localized to your browser and never exposed to standard analytical views.
+                </p>
+              </div>
+
+              {/* Search bar */}
+              <div className="relative max-w-md">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search by name, pseudonym, tag, comment text..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 hover:bg-slate-100/70 focus:bg-white text-slate-800 border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl outline-none transition-all placeholder:text-slate-400 font-semibold shadow-inner"
+                />
+                {searchTerm && (
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Main Grid View */}
+          <div className="flex-grow overflow-auto border border-slate-150 rounded-xl bg-slate-50/20 shadow-inner min-h-[300px]">
+            {viewMode === 'table' ? (
+              filteredData.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-slate-400">
+                  <svg className="h-10 w-10 text-slate-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm font-semibold">No matching records found.</p>
+                </div>
+              ) : (
+                <table className="w-full border-collapse text-left text-xs text-slate-700">
+                  <thead className="sticky top-0 bg-slate-900 text-slate-100 font-bold uppercase tracking-wider select-none z-10">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Real Name</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Pseudonym</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Tenure</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Fulfillment</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Governance</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Scores (Q13-24)</th>
+                      <th className="px-4 py-3 font-semibold text-[10px]">Tags</th>
+                      <th className="px-4 py-3 font-semibold text-[10px] text-center">Essays</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200/80 bg-white">
+                    {filteredData.map((item, idx) => {
+                      const isExpanded = expandedRow === item.id;
+                      return (
+                        <React.Fragment key={item.id}>
+                          <tr className={`hover:bg-slate-50/50 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/20' : ''}`}>
+                            <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                              {item.realName}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="px-2.5 py-1 bg-slate-950 text-white rounded-lg text-[10px] font-bold shadow-sm">
+                                {item.anonName}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold text-slate-500 whitespace-nowrap">
+                              {item.tenure}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-md font-bold border ${
+                                item.fulfillment === 'Yes' 
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  : item.fulfillment === 'No'
+                                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                  : 'bg-amber-50 border-amber-200 text-amber-700'
+                              }`}>
+                                {item.fulfillment}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-md font-bold border ${
+                                item.govSatisfaction.includes('Very') || item.govSatisfaction.includes('satisfied') && !item.govSatisfaction.includes('dissatisfied') && !item.govSatisfaction.includes('Somewhat')
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  : item.govSatisfaction.includes('dissatisfied') || item.govSatisfaction.includes('Not at all')
+                                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                                  : 'bg-amber-50 border-amber-200 text-amber-700'
+                              }`}>
+                                {item.govSatisfaction}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center space-x-1">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q13</span>
+                                  {renderScore(item.likert.q13)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q14</span>
+                                  {renderScore(item.likert.q14)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q15</span>
+                                  {renderScore(item.likert.q15)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q16</span>
+                                  {renderScore(item.likert.q16)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q22</span>
+                                  {renderScore(item.likert.q22)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q23</span>
+                                  {renderScore(item.likert.q23)}
+                                </div>
+                                <div className="flex flex-col items-center">
+                                  <span className="text-[8px] text-slate-400 font-bold font-mono leading-none mb-0.5">Q24</span>
+                                  {renderScore(item.likert.q24)}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                {item.tags.map((tag, tagIdx) => {
+                                  const isTheme = THEME_TAGS.includes(tag);
+                                  return (
+                                    <span 
+                                      key={tagIdx} 
+                                      className={`px-1.5 py-0.5 rounded border text-[9px] font-bold shadow-inner truncate ${
+                                        isTheme 
+                                          ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                                          : 'bg-rose-50 border-rose-200 text-rose-700'
+                                      }`}
+                                      title={tag}
+                                    >
+                                      {tag}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              <button
+                                onClick={() => toggleExpand(item.id)}
+                                className={`px-2.5 py-1 text-[10px] font-bold border rounded-lg transition-all flex items-center space-x-1 mx-auto ${
+                                  isExpanded
+                                    ? 'bg-slate-800 text-white border-slate-700 shadow-inner'
+                                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm'
+                                }`}
+                              >
+                                <span>{isExpanded ? 'Hide' : 'View'}</span>
+                                <svg className={`h-3.5 w-3.5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+
+                          {/* Expanded Qualitative Section */}
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan="8" className="bg-slate-50/70 p-6 border-b border-slate-200 shadow-inner">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                  <div className="bg-white rounded-xl border border-slate-200/50 p-4 shadow-sm">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Favorite Part</h4>
+                                    <p className="text-xs text-slate-700 font-medium leading-relaxed italic">
+                                      {item.excerpts.favoritePart ? `"${item.excerpts.favoritePart}"` : <span className="text-slate-400 italic">No response provided</span>}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white rounded-xl border border-slate-200/50 p-4 shadow-sm">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Areas of Growth</h4>
+                                    <p className="text-xs text-slate-700 font-medium leading-relaxed italic">
+                                      {item.excerpts.growthAreas ? `"${item.excerpts.growthAreas}"` : <span className="text-slate-400 italic">No response provided</span>}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white rounded-xl border border-slate-200/50 p-4 shadow-sm">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Governance Comments</h4>
+                                    <p className="text-xs text-slate-700 font-medium leading-relaxed italic">
+                                      {item.excerpts.govComments ? `"${item.excerpts.govComments}"` : <span className="text-slate-400 italic">No response provided</span>}
+                                    </p>
+                                  </div>
+                                  <div className="bg-white rounded-xl border border-slate-200/50 p-4 shadow-sm">
+                                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Participation Barriers</h4>
+                                    <p className="text-xs text-slate-700 font-medium leading-relaxed italic">
+                                      {item.excerpts.barriers ? `"${item.excerpts.barriers}"` : <span className="text-slate-400 italic">No response provided</span>}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )
+            ) : (
+              /* Beautiful formatting for Raw JSON payload */
+              <div className="p-4 bg-slate-900 text-slate-200 text-xs font-mono select-text h-full overflow-y-auto leading-relaxed shadow-inner">
+                <pre>{JSON.stringify(rawData, null, 2)}</pre>
+              </div>
+            )}
+          </div>
+          
+          {/* Bottom count badge */}
+          <div className="mt-4 text-xs font-semibold text-slate-400 flex items-center justify-between">
+            <span>Showing {viewMode === 'table' ? filteredData.length : rawData.length} of {rawData.length} total entries</span>
+            <span>CVC Survey Explorer</span>
+          </div>
+        </div>
+      );
+    }
+
+    // Hydrate root react element
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+  </script>
+</body>
+</html>

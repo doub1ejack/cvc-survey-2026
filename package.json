@@ -1,0 +1,14 @@
+{
+  "name": "cvc-survey-explorer-proxy",
+  "version": "1.0.0",
+  "description": "CORS Proxy for CVC Survey Data Explorer to connect to Notion API",
+  "main": "proxy.js",
+  "scripts": {
+    "start": "node proxy.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "private": true
+}
