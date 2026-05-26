@@ -60,10 +60,10 @@
                 900: "#14532d",
               },
               accent: {
-                indigo: "#6366f1",
-                violet: "#8b5cf6",
-                rose: "#f43f5e",
-                amber: "#f59e0b",
+                theme: "#7461F3",
+                "theme-light": "#9B8DF7",
+                signal: "#F56939",
+                "signal-light": "#F7935F",
                 slate: "#475569",
               },
             },
@@ -2751,11 +2751,11 @@
           themeGrad
             .append("stop")
             .attr("offset", "0%")
-            .attr("stop-color", "#6366f1");
+            .attr("stop-color", "#7461F3");
           themeGrad
             .append("stop")
             .attr("offset", "100%")
-            .attr("stop-color", "#8b5cf6");
+            .attr("stop-color", "#9B8DF7");
 
           // Define Signal Gradient (Rose/Amber)
           const signalGrad = defs
@@ -2768,11 +2768,11 @@
           signalGrad
             .append("stop")
             .attr("offset", "0%")
-            .attr("stop-color", "#f43f5e");
+            .attr("stop-color", "#F56939");
           signalGrad
             .append("stop")
             .attr("offset", "100%")
-            .attr("stop-color", "#f59e0b");
+            .attr("stop-color", "#F7935F");
 
           // Render SVG Circles
           const circles = elem
@@ -2886,7 +2886,7 @@
                     {tagName}
                   </h3>
                   <span
-                    className={`relative group px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide cursor-default ${THEME_TAGS.includes(tagName) ? "bg-indigo-100 text-indigo-700" : "bg-rose-100 text-rose-700"}`}
+                    className={`relative group px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide cursor-default ${THEME_TAGS.includes(tagName) ? "bg-[#7461F3]/15 text-[#7461F3]" : "bg-[#F56939]/15 text-[#F56939]"}`}
                   >
                     {THEME_TAGS.includes(tagName) ? "theme" : "signal"}
                     <span className="absolute top-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 rounded-lg bg-slate-900 text-white text-[11px] font-normal normal-case tracking-normal leading-relaxed opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50 shadow-xl">
@@ -3059,12 +3059,12 @@
             "emotional-toll",
             "pathways-unclear",
           ],
-          color: "#6366f1",
+          color: "#5B7FC0",
           label: "Governance/Structural",
         },
         "Social/Climate": {
           tags: ["social-exclusion", "relational-warmth"],
-          color: "#f43f5e",
+          color: "#D4808A",
           label: "Social/Climate",
         },
         "Life/Capacity": {
@@ -3073,12 +3073,12 @@
             "life-barriers-only",
             "access-invisible",
           ],
-          color: "#f59e0b",
+          color: "#C9A84C",
           label: "Life/Capacity",
         },
         "No Barriers Named": {
           tags: ["community-strength", "trajectory-positive", "good-faith"],
-          color: "#22c55e",
+          color: "#6BAF8D",
           label: "No Barriers Named",
         },
       };
@@ -3150,13 +3150,13 @@
 
       // Distinct D3 colors for each question so we can track them in animation
       const QUESTION_COLORS = {
-        q13: "#4e79a7", // Blue
-        q14: "#f28e2b", // Orange
-        q15: "#e15759", // Red
-        q16: "#76b7b2", // Teal
-        q22: "#59a14f", // Green
-        q23: "#edc948", // Yellow
-        q24: "#b07aa1", // Purple
+        q13: "#5A9BD5", // Soft steel blue
+        q14: "#8CBE6E", // Sage green
+        q15: "#D4808A", // Dusty pink
+        q16: "#76b7b2", // Teal (unchanged)
+        q22: "#6BAF8D", // Muted seafoam
+        q23: "#C9B96C", // Muted ochre/gold
+        q24: "#8B98A8", // Cool slate-blue
       };
 
       function TenureArcTab({ data }) {
@@ -3224,7 +3224,7 @@
               </div>
 
               {/* Tenure Segmented Control Selector */}
-              <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50">
+              <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50 axis-control-bar">
                 {TENURE_GROUPS.map((grp) => (
                   <button
                     key={grp}
@@ -3860,7 +3860,7 @@
             const key = `${d.fulfillment}|${d.satisfaction}`;
             const isDiagonal = DIAGONAL_CELLS.includes(key);
             if (d.count === 0) return "none";
-            return isDiagonal ? "#64748b" : "#f97316";
+            return isDiagonal ? "#64748b" : "#5B9EA6";
           };
 
           const getCellStroke = (d) => {
@@ -3942,8 +3942,8 @@
               const key = `${d.fulfillment}|${d.satisfaction}`;
               const isDiagonal = DIAGONAL_CELLS.includes(key);
               if (key === selectedCell)
-                return isDiagonal ? "#334155" : "#ea580c";
-              return isDiagonal ? "#64748b" : "#f97316";
+                return isDiagonal ? "#334155" : "#3D7A82";
+              return isDiagonal ? "#64748b" : "#5B9EA6";
             });
         }, [selectedCell]);
 
@@ -3961,7 +3961,12 @@
       // Use this for any row-tag displayed out of context (pills, inline labels).
       // NOT needed for h3 headings where the definition is shown statically below.
       // Tooltip renders via portal to escape overflow:hidden/auto ancestors.
-      function RowTagWithTooltip({ tag, className = "", style = {}, children }) {
+      function RowTagWithTooltip({
+        tag,
+        className = "",
+        style = {},
+        children,
+      }) {
         const entry = CODEBOOK[tag];
         const [hover, setHover] = useState(false);
         const spanRef = useRef(null);
@@ -3986,30 +3991,32 @@
             onMouseLeave={() => setHover(false)}
           >
             {children || tag}
-            {hover && entry && ReactDOM.createPortal(
-              <div
-                className="fixed bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none border border-slate-700 z-[9999]"
-                style={{
-                  top: `${pos.top}px`,
-                  left: `${pos.left}px`,
-                  transform: "translate(-50%, -100%)",
-                  width: "260px",
-                }}
-              >
-                <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide flex justify-between items-center">
-                  <span>{entry.fullName}</span>
-                  <span
-                    className={`text-[10px] ml-2 px-1.5 py-0.5 rounded-full font-bold shrink-0 ${entry.type === "Theme" ? "bg-indigo-500 text-white" : "bg-rose-500 text-white"}`}
-                  >
-                    {entry.code}
-                  </span>
-                </div>
-                <div className="text-slate-300 leading-relaxed">
-                  {entry.definition}
-                </div>
-              </div>,
-              document.body
-            )}
+            {hover &&
+              entry &&
+              ReactDOM.createPortal(
+                <div
+                  className="fixed bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none border border-slate-700 z-[9999]"
+                  style={{
+                    top: `${pos.top}px`,
+                    left: `${pos.left}px`,
+                    transform: "translate(-50%, -100%)",
+                    width: "260px",
+                  }}
+                >
+                  <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide flex justify-between items-center">
+                    <span>{entry.fullName}</span>
+                    <span
+                      className={`text-[10px] ml-2 px-1.5 py-0.5 rounded-full font-bold shrink-0 ${entry.type === "Theme" ? "bg-[#7461F3] text-white" : "bg-[#F56939] text-white"}`}
+                    >
+                      {entry.code}
+                    </span>
+                  </div>
+                  <div className="text-slate-300 leading-relaxed">
+                    {entry.definition}
+                  </div>
+                </div>,
+                document.body,
+              )}
           </span>
         );
       }
@@ -4108,8 +4115,8 @@
                             <div
                               className={`h-full rounded-md transition-all duration-500 shadow-sm ${
                                 isTheme
-                                  ? "bg-gradient-to-r from-accent-indigo to-accent-violet"
-                                  : "bg-gradient-to-r from-accent-rose to-accent-amber"
+                                  ? "bg-gradient-to-r from-accent-theme to-accent-theme-light"
+                                  : "bg-gradient-to-r from-accent-signal to-accent-signal-light"
                               }`}
                               style={{ width: `${percentWidth}%` }}
                             />
@@ -4138,7 +4145,6 @@
                 </div>
               </div>
             </div>
-
           </div>
         );
       }
@@ -4165,7 +4171,7 @@
       // ── Barrier Axis Segmented Control ──────────────────────────
       function BarrierAxisControl({ axisKey, onChange }) {
         return (
-          <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50">
+          <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50 axis-control-bar">
             {BARRIER_AXIS_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
@@ -4933,8 +4939,8 @@
                                         key={tagIdx}
                                         className={`px-1.5 py-0.5 rounded border text-[9px] font-bold shadow-inner truncate ${
                                           isTheme
-                                            ? "bg-indigo-50 border-indigo-200 text-indigo-700"
-                                            : "bg-rose-50 border-rose-200 text-rose-700"
+                                            ? "bg-[#7461F3]/10 border-[#7461F3]/25 text-[#7461F3]"
+                                            : "bg-[#F56939]/10 border-[#F56939]/25 text-[#F56939]"
                                         }`}
                                         title={tag}
                                       >
