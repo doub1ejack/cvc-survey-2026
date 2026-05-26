@@ -3542,20 +3542,13 @@
           const getCellFill = (d) => {
             const key = `${d.fulfillment}|${d.satisfaction}`;
             const isDiagonal = DIAGONAL_CELLS.includes(key);
-
             if (d.count === 0) return "none";
-
-            if (selectedCell === key) {
-              return isDiagonal ? "#334155" : "#ea580c"; // Highlighted active
-            }
-            return isDiagonal ? "#64748b" : "#f97316"; // standard
+            return isDiagonal ? "#64748b" : "#f97316";
           };
 
           const getCellStroke = (d) => {
-            const key = `${d.fulfillment}|${d.satisfaction}`;
-            const isDiagonal = DIAGONAL_CELLS.includes(key);
-            if (d.count === 0) return "#cbd5e1"; // small grey circle outlines for structural grid integrity
-            return selectedCell === key ? "#0f172a" : "transparent";
+            if (d.count === 0) return "#cbd5e1";
+            return "transparent";
           };
 
           // Render cell circles
@@ -3614,7 +3607,26 @@
           resizeObserver.observe(container);
 
           return () => resizeObserver.disconnect();
-        }, [cells, selectedCell]);
+        }, [cells]);
+
+        // Highlight selected cell without rebuilding the chart
+        useEffect(() => {
+          if (!svgRef.current) return;
+          const svg = d3.select(svgRef.current);
+          svg.selectAll(".matrix-node circle")
+            .attr("stroke", function(d) {
+              if (!d || d.count === 0) return "#cbd5e1";
+              const key = `${d.fulfillment}|${d.satisfaction}`;
+              return key === selectedCell ? "#0f172a" : "transparent";
+            })
+            .attr("fill", function(d) {
+              if (!d || d.count === 0) return "none";
+              const key = `${d.fulfillment}|${d.satisfaction}`;
+              const isDiagonal = DIAGONAL_CELLS.includes(key);
+              if (key === selectedCell) return isDiagonal ? "#334155" : "#ea580c";
+              return isDiagonal ? "#64748b" : "#f97316";
+            });
+        }, [selectedCell]);
 
         return (
           <div
