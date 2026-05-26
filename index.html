@@ -166,6 +166,142 @@
 
       const ALL_TAGS = [...THEME_TAGS, ...SIGNAL_TAGS];
 
+      const CODEBOOK = {
+        "governance-complexity": {
+          code: "#1",
+          type: "Theme",
+          fullName: "Governance Complexity",
+          definition:
+            "Respondents describe governance as confusing, unclear, inconsistently practiced, or structurally broken — regardless of whether they support or oppose the current approach.",
+        },
+        "behavioral-failures": {
+          code: "#2A",
+          type: "Theme",
+          fullName: "Behavioral Failures",
+          definition:
+            "Respondents describe specific behaviors — blocking, opacity, power asymmetry, manipulation — that violate the principles of well-functioning governance regardless of which system is named.",
+        },
+        "governance-system-design": {
+          code: "#2B",
+          type: "Theme",
+          fullName: "Governance System Design",
+          definition:
+            "Respondents engage genuinely with the question of which governance system or process design would serve the community better — including both those who defend sociocracy and those who question it.",
+        },
+        "board-circles-tension": {
+          code: "#3",
+          type: "Theme",
+          fullName: "Board–Circles Tension",
+          definition:
+            "Respondents express views — often in direct disagreement with each other — about whether the board or circles should hold decision-making and spending authority.",
+        },
+        "participation-barriers-life": {
+          code: "#4",
+          type: "Theme",
+          fullName: "Participation Barriers (Life)",
+          definition:
+            "Respondents cite external life demands — parenting, work, caregiving, illness, financial pressure — as limiting their ability to participate, not lack of interest.",
+        },
+        "emotional-toll": {
+          code: "#5",
+          type: "Theme",
+          fullName: "Emotional Toll",
+          definition:
+            "Respondents describe governance processes as causing anxiety, draining meetings, interpersonal damage, or leading people to disengage or leave.",
+        },
+        "proposal-friction": {
+          code: "#6",
+          type: "Theme",
+          fullName: "Proposal Friction",
+          definition:
+            "Respondents describe frustration with how proposals move through the community — being blocked, stalled, or subject to ad-hoc or arbitrary decisions.",
+        },
+        "pathways-unclear": {
+          code: "#7",
+          type: "Theme",
+          fullName: "Pathways Unclear",
+          definition:
+            "Respondents — especially newer members — express that it is hard to know how to get involved, what is expected, or how to contribute meaningfully outside of formal circles or the board.",
+        },
+        "social-exclusion": {
+          code: "#8",
+          type: "Theme",
+          fullName: "Social Exclusion",
+          definition:
+            "Respondents describe feeling excluded, observing clique dynamics, or experiencing the social environment as a barrier to participation.",
+        },
+        "access-invisible": {
+          code: "#9",
+          type: "Theme",
+          fullName: "Access Invisible",
+          definition:
+            "Respondents describe how the community's participation structures are not equally accessible — specifically naming neurodivergence, caregiving load, and fluctuating capacity as sources of invisible barriers.",
+        },
+        "infrastructure-gaps": {
+          code: "#10",
+          type: "Theme",
+          fullName: "Infrastructure Gaps",
+          definition:
+            "Respondents identify specific structural gaps — absent circles, inadequate facilities, unclear policies — as unmet community needs.",
+        },
+        "community-strength": {
+          code: "#11",
+          type: "Theme",
+          fullName: "Community Strength",
+          definition:
+            "Respondents describe specific, concrete things they value about living at CVC — collaborative projects, casual connection, intergenerational relationships, co-parenting, shared land.",
+        },
+        "trajectory-positive": {
+          code: "#12",
+          type: "Signal",
+          fullName: "Trajectory Positive",
+          definition:
+            "A portion of respondents hold a forward-looking view that governance is improving or moving in the right direction.",
+        },
+        "conflict-normalized": {
+          code: "#13",
+          type: "Signal",
+          fullName: "Conflict Normalized",
+          definition:
+            "A small number of respondents explicitly contextualize governance difficulty as inherent to self-governance rather than as evidence of failure.",
+        },
+        "good-faith": {
+          code: "#14",
+          type: "Signal",
+          fullName: "Good Faith",
+          definition:
+            "Respondents explicitly attribute positive intent to people involved in governance, describing them as working hard and in good faith.",
+        },
+        "epistemic-humility": {
+          code: "#15",
+          type: "Signal",
+          fullName: "Epistemic Humility",
+          definition:
+            "Respondents explicitly withhold judgment on governance because they do not have enough participation experience to form a reliable view.",
+        },
+        "location-first": {
+          code: "#16",
+          type: "Signal",
+          fullName: "Location First",
+          definition:
+            "A subset of respondents chose CVC primarily for the location or land access rather than for cohousing values.",
+        },
+        "life-barriers-only": {
+          code: "#17",
+          type: "Signal",
+          fullName: "Life Barriers Only",
+          definition:
+            "Respondents express genuine desire for more participation and cite only life circumstances — time, children, work — as the barrier. No social climate, governance frustration, or exclusion is named.",
+        },
+        "relational-warmth": {
+          code: "#18",
+          type: "Signal",
+          fullName: "Relational Warmth",
+          definition:
+            "Respondents describe relational connection at CVC in specific, non-generic terms that go beyond a baseline positive response.",
+        },
+      };
+
       // High-Fidelity Preloaded Demo Data matching raw Notion API JSON structure
       const DEMO_PAGES = [
         {
@@ -2064,47 +2200,73 @@
             {/* Navigation Bar */}
             <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30 transition-all-300">
               <div className="max-w-7xl mx-auto px-6">
-                <div className="flex space-x-8">
-                  <button
-                    onClick={() => setActiveTab("tag-frequency")}
-                    className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
-                      activeTab === "tag-frequency"
-                        ? "border-emerald-500 text-emerald-600"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Tag Frequency
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("tenure-arc")}
-                    className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
-                      activeTab === "tenure-arc"
-                        ? "border-emerald-500 text-emerald-600"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Tenure Arc
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("satisfaction-grid")}
-                    className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
-                      activeTab === "satisfaction-grid"
-                        ? "border-emerald-500 text-emerald-600"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Fulfillment & Governance
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("database-view")}
-                    className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
-                      activeTab === "database-view"
-                        ? "border-emerald-500 text-emerald-600"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    Database Viewer
-                  </button>
+                <div className="flex items-center">
+                  <div className="flex space-x-8">
+                    <button
+                      onClick={() => setActiveTab("tag-frequency")}
+                      className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                        activeTab === "tag-frequency"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Tag Frequency
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("tenure-arc")}
+                      className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                        activeTab === "tenure-arc"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Tenure Arc
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("satisfaction-grid")}
+                      className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                        activeTab === "satisfaction-grid"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Fulfillment & Governance
+                    </button>
+                  </div>
+                  <div className="flex-grow" />
+                  <div className="flex space-x-4 items-center">
+                    <button
+                      onClick={() => setActiveTab("database-view")}
+                      className={`py-4 border-b-2 text-sm font-semibold tracking-wide transition-colors focus:outline-none ${
+                        activeTab === "database-view"
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-transparent text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      Data
+                    </button>
+                    <a
+                      href="https://www.notion.so/Qualitative-Codebook-36b61bd83a348195a23dc0b6d2780a5d"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-4 border-b-2 border-transparent text-sm font-semibold tracking-wide text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center gap-1.5"
+                    >
+                      Codebook
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </a>
+                  </div>
                 </div>
               </div>
             </nav>
@@ -2721,6 +2883,14 @@
                     </span>
                   </span>
                 </div>
+
+                {/* Code Definition */}
+                {CODEBOOK[tagName] && (
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {CODEBOOK[tagName].definition}
+                  </p>
+                )}
+
                 <p className="text-xs text-slate-400 font-medium mt-1">
                   Showing {excerpts.length} respondent excerpts
                 </p>
@@ -2825,44 +2995,42 @@
       const LIKERT_QUESTIONS = {
         q13: {
           code: "Q13",
-          shortName: "Q13: Sense of Belonging",
-          fullName:
-            "I feel a strong sense of belonging at Champlain Valley Cohousing.",
+          shortName: "Q13: Treated respectfully",
+          fullName: "I am treated respectfully here.",
         },
         q14: {
           code: "Q14",
-          shortName: "Q14: Voice in Plenaries",
-          fullName:
-            "I feel heard and respected during community plenaries and discussions.",
+          shortName: "Q14: Efforts appreciated",
+          fullName: "I feel like my efforts are appreciated.",
         },
         q15: {
           code: "Q15",
-          shortName: "Q15: Consensus Fairness",
-          fullName:
-            "Decisions are made in a transparent, consensus-oriented, and fair manner.",
+          shortName: "Q15: Voice heard",
+          fullName: "I feel like my voice is heard.",
         },
         q16: {
           code: "Q16",
-          shortName: "Q16: Equitable Chore Share",
-          fullName: "Community work and chore rotations are shared equitably.",
+          shortName: "Q16: Participation clarity",
+          fullName:
+            "How I might participate effectively at CVC is clear to me.",
         },
         q22: {
           code: "Q22",
-          shortName: "Q22: Trust in Governance",
+          shortName: "Q22: Balance obligations",
           fullName:
-            "I trust our governance circles to make decisions in the community's best interest.",
+            "I am able to balance obligations in the community with other obligations in my life.",
         },
         q23: {
           code: "Q23",
-          shortName: "Q23: Circle Communication",
+          shortName: "Q23: Land/facilities maintained",
           fullName:
-            "Communication between different circles (Life, Land, Governance) is clear.",
+            "I feel that CVC land and facilities are being well-maintained by our community.",
         },
         q24: {
           code: "Q24",
-          shortName: "Q24: Neighborhood Support",
+          shortName: "Q24: Participation satisfaction",
           fullName:
-            "I feel supported by my neighbors during challenging times.",
+            "I feel satisfied with the level of overall community participation.",
         },
       };
 
@@ -2970,7 +3138,7 @@
             </div>
 
             {/* Canvas Dot Plot Area */}
-            <div className="relative min-h-[400px] overflow-y-auto">
+            <div className="relative" style={{ height: "500px" }}>
               <TenureDotPlot scores={scoresForTenure} setTooltip={setTooltip} />
             </div>
 
@@ -2983,22 +3151,35 @@
                   top: `${tooltip.y + 10}px`,
                 }}
               >
-                <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 flex justify-between items-center text-xs tracking-wide">
-                  <span>
-                    {tooltip.code} - {tooltip.fullText}
-                  </span>
-                  <span className="text-[10px] bg-emerald-500 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">
-                    {tooltip.n}
-                  </span>
-                </div>
-                <div className="flex justify-between border-t border-slate-800 pt-1.5">
-                  <span className="text-slate-400 font-semibold">
-                    Mean score:
-                  </span>
-                  <span className="font-bold text-emerald-400 text-sm">
-                    {tooltip.score} / 5.0
-                  </span>
-                </div>
+                {tooltip.labelOnly ? (
+                  <div>
+                    <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide">
+                      {tooltip.code}
+                    </div>
+                    <div className="text-slate-200 leading-relaxed">
+                      {tooltip.fullText}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 flex justify-between items-center text-xs tracking-wide">
+                      <span>
+                        {tooltip.code} - {tooltip.fullText}
+                      </span>
+                      <span className="text-[10px] bg-emerald-500 text-slate-900 px-1.5 py-0.5 rounded-full font-bold">
+                        {tooltip.n}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-slate-800 pt-1.5">
+                      <span className="text-slate-400 font-semibold">
+                        Mean score:
+                      </span>
+                      <span className="font-bold text-emerald-400 text-sm">
+                        {tooltip.score} / 5.0
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3079,7 +3260,8 @@
               .style("opacity", 0.7);
 
             // Y-Axis labels (Question Codes / short labels)
-            g.append("g")
+            const yAxisG = g
+              .append("g")
               .attr("class", "y-axis text-slate-600 font-semibold select-none")
               .call(
                 d3
@@ -3087,9 +3269,29 @@
                   .tickFormat((d) => LIKERT_QUESTIONS[d].shortName),
               )
               .call((g) => g.select(".domain").remove())
-              .call((g) => g.selectAll(".tick line").remove())
+              .call((g) => g.selectAll(".tick line").remove());
+            yAxisG
               .selectAll("text")
-              .style("font-size", "11px");
+              .style("font-size", "11px")
+              .style("cursor", "help")
+              .on("mousemove", (event, d) => {
+                const bounds = container.getBoundingClientRect();
+                const x = event.clientX - bounds.left;
+                const y = event.clientY - bounds.top;
+                setTooltip({
+                  show: true,
+                  x,
+                  y,
+                  code: LIKERT_QUESTIONS[d].code,
+                  fullText: LIKERT_QUESTIONS[d].fullName,
+                  score: null,
+                  n: null,
+                  labelOnly: true,
+                });
+              })
+              .on("mouseleave", () => {
+                setTooltip((prev) => ({ ...prev, show: false }));
+              });
 
             // X-Axis labels
             g.append("g")
@@ -3205,7 +3407,10 @@
         }, [scores]);
 
         return (
-          <div ref={containerRef} className="viz-tenure-arc w-full h-full">
+          <div
+            ref={containerRef}
+            className="viz-tenure-arc w-full absolute inset-0"
+          >
             <svg ref={svgRef} className="w-full h-full" />
           </div>
         );
@@ -3309,7 +3514,7 @@
               </div>
 
               {/* Matrix Canvas Container */}
-              <div className="relative" style={{ height: '500px' }}>
+              <div className="relative" style={{ height: "500px" }}>
                 <FulfillmentGrid
                   cells={gridStats}
                   selectedCell={selectedCell}
@@ -3613,17 +3818,19 @@
         useEffect(() => {
           if (!svgRef.current) return;
           const svg = d3.select(svgRef.current);
-          svg.selectAll(".matrix-node circle")
-            .attr("stroke", function(d) {
+          svg
+            .selectAll(".matrix-node circle")
+            .attr("stroke", function (d) {
               if (!d || d.count === 0) return "#cbd5e1";
               const key = `${d.fulfillment}|${d.satisfaction}`;
               return key === selectedCell ? "#0f172a" : "transparent";
             })
-            .attr("fill", function(d) {
+            .attr("fill", function (d) {
               if (!d || d.count === 0) return "none";
               const key = `${d.fulfillment}|${d.satisfaction}`;
               const isDiagonal = DIAGONAL_CELLS.includes(key);
-              if (key === selectedCell) return isDiagonal ? "#334155" : "#ea580c";
+              if (key === selectedCell)
+                return isDiagonal ? "#334155" : "#ea580c";
               return isDiagonal ? "#64748b" : "#f97316";
             });
         }, [selectedCell]);
@@ -3641,6 +3848,7 @@
       // Detail Panel showing analytical Tag profile inside intersection cell
       function TagProfilePanel({ cellData, onClose }) {
         if (!cellData) return null;
+        const [tagTooltip, setTagTooltip] = useState({ show: false, x: 0, y: 0, name: "" });
 
         // Extract and sort tags inside selected matrix cell
         const tagChartData = useMemo(() => {
@@ -3655,7 +3863,7 @@
         }, [cellData]);
 
         return (
-          <div className="viz-sidebar-wrapper w-full md:w-[420px] bg-white rounded-2xl border border-slate-200/60 shadow-lg p-6 flex flex-col shrink-0 min-h-0 max-h-[85vh] overflow-y-auto">
+          <div className="viz-sidebar-wrapper relative w-full md:w-[420px] bg-white rounded-2xl border border-slate-200/60 shadow-lg p-6 flex flex-col shrink-0 min-h-0 max-h-[85vh] overflow-y-auto">
             {/* Header */}
             <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
               <div>
@@ -3720,7 +3928,19 @@
                       return (
                         <div key={idx} className="space-y-1">
                           <div className="flex justify-between text-xs font-semibold">
-                            <span className="text-slate-700 truncate">
+                            <span
+                              className="text-slate-700 truncate cursor-help"
+                              onMouseMove={(e) => {
+                                const bounds = e.currentTarget.closest('.viz-sidebar-wrapper').getBoundingClientRect();
+                                setTagTooltip({
+                                  show: true,
+                                  x: e.clientX - bounds.left,
+                                  y: e.clientY - bounds.top,
+                                  name: item.name,
+                                });
+                              }}
+                              onMouseLeave={() => setTagTooltip((prev) => ({ ...prev, show: false }))}
+                            >
                               {item.name}
                             </span>
                             <span className="text-slate-400">
@@ -3761,6 +3981,27 @@
                 </div>
               </div>
             </div>
+
+            {/* Tag Definition Tooltip */}
+            {tagTooltip.show && CODEBOOK[tagTooltip.name] && (
+              <div
+                className="absolute bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none z-30 transition-all border border-slate-700 max-w-[280px]"
+                style={{
+                  left: `${Math.min(tagTooltip.x + 10, 140)}px`,
+                  top: `${tagTooltip.y + 10}px`,
+                }}
+              >
+                <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide flex justify-between items-center">
+                  <span>{CODEBOOK[tagTooltip.name].fullName}</span>
+                  <span className={`text-[10px] ml-2 px-1.5 py-0.5 rounded-full font-bold ${CODEBOOK[tagTooltip.name].type === "Theme" ? "bg-indigo-500 text-white" : "bg-rose-500 text-white"}`}>
+                    {CODEBOOK[tagTooltip.name].code}
+                  </span>
+                </div>
+                <div className="text-slate-300 leading-relaxed">
+                  {CODEBOOK[tagTooltip.name].definition}
+                </div>
+              </div>
+            )}
           </div>
         );
       }
