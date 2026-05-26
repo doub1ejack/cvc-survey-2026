@@ -3957,15 +3957,66 @@
         );
       }
 
+      // ── Reusable Row Tag with CODEBOOK hover tooltip ──────────
+      // Use this for any row-tag displayed out of context (pills, inline labels).
+      // NOT needed for h3 headings where the definition is shown statically below.
+      // Tooltip renders via portal to escape overflow:hidden/auto ancestors.
+      function RowTagWithTooltip({ tag, className = "", style = {}, children }) {
+        const entry = CODEBOOK[tag];
+        const [hover, setHover] = useState(false);
+        const spanRef = useRef(null);
+        const [pos, setPos] = useState({ top: 0, left: 0 });
+
+        const handleEnter = () => {
+          if (!entry || !spanRef.current) return;
+          const rect = spanRef.current.getBoundingClientRect();
+          setPos({
+            top: rect.top + window.scrollY - 8,
+            left: rect.left + rect.width / 2,
+          });
+          setHover(true);
+        };
+
+        return (
+          <span
+            ref={spanRef}
+            className={`cursor-help ${className}`}
+            style={style}
+            onMouseEnter={handleEnter}
+            onMouseLeave={() => setHover(false)}
+          >
+            {children || tag}
+            {hover && entry && ReactDOM.createPortal(
+              <div
+                className="fixed bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none border border-slate-700 z-[9999]"
+                style={{
+                  top: `${pos.top}px`,
+                  left: `${pos.left}px`,
+                  transform: "translate(-50%, -100%)",
+                  width: "260px",
+                }}
+              >
+                <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide flex justify-between items-center">
+                  <span>{entry.fullName}</span>
+                  <span
+                    className={`text-[10px] ml-2 px-1.5 py-0.5 rounded-full font-bold shrink-0 ${entry.type === "Theme" ? "bg-indigo-500 text-white" : "bg-rose-500 text-white"}`}
+                  >
+                    {entry.code}
+                  </span>
+                </div>
+                <div className="text-slate-300 leading-relaxed">
+                  {entry.definition}
+                </div>
+              </div>,
+              document.body
+            )}
+          </span>
+        );
+      }
+
       // Detail Panel showing analytical Tag profile inside intersection cell
       function TagProfilePanel({ cellData, onClose }) {
         if (!cellData) return null;
-        const [tagTooltip, setTagTooltip] = useState({
-          show: false,
-          x: 0,
-          y: 0,
-          name: "",
-        });
 
         // Extract and sort tags inside selected matrix cell
         const tagChartData = useMemo(() => {
@@ -4045,28 +4096,10 @@
                       return (
                         <div key={idx} className="space-y-1">
                           <div className="flex justify-between text-xs font-semibold">
-                            <span
-                              className="text-slate-700 truncate cursor-help rowtag"
-                              onMouseMove={(e) => {
-                                const bounds = e.currentTarget
-                                  .closest(".viz-sidebar-wrapper")
-                                  .getBoundingClientRect();
-                                setTagTooltip({
-                                  show: true,
-                                  x: e.clientX - bounds.left,
-                                  y: e.clientY - bounds.top,
-                                  name: item.name,
-                                });
-                              }}
-                              onMouseLeave={() =>
-                                setTagTooltip((prev) => ({
-                                  ...prev,
-                                  show: false,
-                                }))
-                              }
-                            >
-                              {item.name}
-                            </span>
+                            <RowTagWithTooltip
+                              tag={item.name}
+                              className="text-slate-700 truncate rowtag"
+                            />
                             <span className="text-slate-400">
                               n={item.count}
                             </span>
@@ -4106,28 +4139,6 @@
               </div>
             </div>
 
-            {/* Tag Definition Tooltip */}
-            {tagTooltip.show && CODEBOOK[tagTooltip.name] && (
-              <div
-                className="absolute bg-slate-900/95 text-white text-xs rounded-xl p-3 shadow-xl pointer-events-none z-30 transition-all border border-slate-700 max-w-[280px]"
-                style={{
-                  left: `${Math.min(tagTooltip.x + 10, 140)}px`,
-                  top: `${tagTooltip.y + 10}px`,
-                }}
-              >
-                <div className="font-bold border-b border-slate-700 pb-1.5 mb-1.5 tracking-wide flex justify-between items-center">
-                  <span>{CODEBOOK[tagTooltip.name].fullName}</span>
-                  <span
-                    className={`text-[10px] ml-2 px-1.5 py-0.5 rounded-full font-bold ${CODEBOOK[tagTooltip.name].type === "Theme" ? "bg-indigo-500 text-white" : "bg-rose-500 text-white"}`}
-                  >
-                    {CODEBOOK[tagTooltip.name].code}
-                  </span>
-                </div>
-                <div className="text-slate-300 leading-relaxed">
-                  {CODEBOOK[tagTooltip.name].definition}
-                </div>
-              </div>
-            )}
           </div>
         );
       }
@@ -4240,17 +4251,16 @@
                     {/* Barrier-relevant tag pills */}
                     <div className="flex flex-wrap gap-1 mb-2">
                       {matchTags.map((tag) => (
-                        <span
+                        <RowTagWithTooltip
                           key={tag}
+                          tag={tag}
                           className="px-2 py-0.5 rounded text-[10px] font-semibold rowtag"
                           style={{
                             backgroundColor: `${catColor}20`,
                             color: catColor,
                             border: `1px solid ${catColor}40`,
                           }}
-                        >
-                          {tag}
-                        </span>
+                        />
                       ))}
                     </div>
                     {/* Barrier excerpt */}
