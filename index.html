@@ -3309,7 +3309,7 @@
               </div>
 
               {/* Matrix Canvas Container */}
-              <div className="flex-1 relative min-h-[350px]">
+              <div className="relative" style={{ height: '500px' }}>
                 <FulfillmentGrid
                   cells={gridStats}
                   selectedCell={selectedCell}
@@ -3619,7 +3619,7 @@
         return (
           <div
             ref={containerRef}
-            className="viz-fulfillment-grid w-full h-full"
+            className="viz-fulfillment-grid w-full absolute inset-0"
           >
             <svg ref={svgRef} className="w-full h-full" />
           </div>
