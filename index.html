@@ -1946,6 +1946,12 @@
             "select",
             "Somewhat satisfied",
           );
+          const hoursPerMonth = getPropValue(
+            page,
+            "Hours/month",
+            "select",
+            "0-2",
+          );
 
           // Extract and coerce Likert scales Q13-Q24 to numbers (fallback to 3/Neutral)
           const q13 = Number(
@@ -2047,6 +2053,7 @@
             tenure,
             fulfillment,
             govSatisfaction,
+            hoursPerMonth,
             likert: { q13, q14, q15, q16, q22, q23, q24 },
             tags,
             openCodes,
@@ -2210,7 +2217,7 @@
                           : "border-transparent text-slate-500 hover:text-slate-800"
                       }`}
                     >
-                      Tag Frequency
+                      Topics
                     </button>
                     <button
                       onClick={() => setActiveTab("tenure-arc")}
@@ -2220,7 +2227,7 @@
                           : "border-transparent text-slate-500 hover:text-slate-800"
                       }`}
                     >
-                      Tenure Arc
+                      Over time
                     </button>
                     <button
                       onClick={() => setActiveTab("satisfaction-grid")}
@@ -2230,7 +2237,7 @@
                           : "border-transparent text-slate-500 hover:text-slate-800"
                       }`}
                     >
-                      Fulfillment & Governance
+                      Fulfillment
                     </button>
                     <button
                       onClick={() => setActiveTab("barrier-bars")}
@@ -2240,7 +2247,7 @@
                           : "border-transparent text-slate-500 hover:text-slate-800"
                       }`}
                     >
-                      Barrier Bars
+                      Barriers
                     </button>
                   </div>
                   <div className="flex-grow" />
@@ -2514,7 +2521,7 @@
       // TAB 1: Tag Frequency Bubble Chart
       // ==========================================
       const SUMMARY_TEXT_1 =
-        "Each bubble represents one of 19 analytical codes applied to survey responses. Bubble size reflects how many respondents carry that code. Click any bubble to read anonymized excerpts from those respondents.";
+        "Each bubble represents one way of describing community experience. Click any bubble to read what people actually wrote.";
 
       function BubbleChartTab({ data }) {
         const [selectedTag, setSelectedTag] = useState(null);
@@ -2570,10 +2577,11 @@
             <div className="flex-1 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 flex flex-col min-h-0 relative">
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-800">
-                  Tag Frequency Bubble Chart
+                  Topics: What showed up in the responses
                 </h2>
                 <p className="text-xs text-slate-400 font-semibold mb-3">
-                  Exploring "What Was Talked About" in cohousing life
+                  Bigger bubbles = more people mentioned this theme. Purple =
+                  themes, Orange = minority signals worth noting.
                 </p>
 
                 {/* Summary panel */}
@@ -3003,7 +3011,7 @@
       // TAB 2: Tenure Arc (Experience Changes Over Time)
       // ==========================================
       const SUMMARY_TEXT_2 =
-        "Each dot represents one survey question, plotted by mean score for the selected tenure group. Use the tenure selector to step through groups and watch how scores shift. Dots that move left indicate declining experience over time.";
+        "Dots moving left as you advance through tenure groups indicate that experience on that question tends to decline over time. Dots that stay put are stable across all groups.";
 
       const LIKERT_QUESTIONS = {
         q13: {
@@ -3145,9 +3153,6 @@
         return respondentTags.filter((t) => catTags.includes(t));
       }
 
-      const SUMMARY_TEXT_BARRIER_BARS =
-        "Horizontal bars show the count of respondents in each group, segmented by dominant barrier type. This view highlights which groups carry the heaviest governance or life-capacity barriers. Counts (not percentages) are shown because with n\u224825\u201333, proportions can be misleading.";
-
       // Distinct D3 colors for each question so we can track them in animation
       const QUESTION_COLORS = {
         q13: "#5A9BD5", // Soft steel blue
@@ -3216,10 +3221,11 @@
             <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
               <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-800">
-                  Tenure Arc Experience Chart
+                  People's experiences over time feel?
                 </h2>
                 <p className="text-xs text-slate-400 font-semibold">
-                  How community life ratings evolve over time
+                  Each dot is one survey question. Step through the buttons to
+                  see how answers shift across tenure groups.
                 </p>
               </div>
 
@@ -3531,8 +3537,6 @@
       // ==========================================
       // TAB 3: Fulfillment vs Governance satisfaction
       // ==========================================
-      const SUMMARY_TEXT_3 =
-        "Each cell shows how many respondents fall at the intersection of their overall fulfillment with CVC life and their satisfaction with governance. The distribution across cells reveals whether these two measures move together or independently.";
 
       const FULFILLMENT_LEVELS = ["Yes", "Somewhat", "No"];
       const SATISFACTION_LEVELS = [
@@ -3542,18 +3546,64 @@
         "Not at all satisfied",
       ];
 
-      // Mapping matrix diagonal cells programmatically (High + High, Low + Low)
-      const DIAGONAL_CELLS = [
-        "Yes|Very satisfied",
-        "Yes|Somewhat satisfied",
-        "Somewhat|Somewhat satisfied",
-        "Somewhat|Somewhat dissatisfied",
-        "No|Somewhat dissatisfied",
-        "No|Not at all satisfied",
+      const HOURS_GROUPS = ["0-2", "2-5", "6-10", "10+"];
+
+      const FULFILLMENT_AXIS_OPTIONS = [
+        {
+          key: "govSatisfaction",
+          label: "Gov Satisfaction",
+          levels: SATISFACTION_LEVELS,
+          axisTitle: "Governance Satisfaction",
+        },
+        {
+          key: "hoursPerMonth",
+          label: "Hours/Month",
+          levels: HOURS_GROUPS,
+          axisTitle: "Hours per Month",
+        },
+        {
+          key: "tenure",
+          label: "Tenure",
+          levels: TENURE_GROUPS,
+          axisTitle: "Tenure",
+        },
       ];
 
+      const FULFILLMENT_SUMMARIES = {
+        govSatisfaction:
+          "If these two things were closely connected, you'd see most people clustered along the diagonal. Off-diagonal circles mean someone is fulfilled despite governance frustration, or dissatisfied despite governance satisfaction.",
+        hoursPerMonth:
+          "If fulfillment tracked time investment, you'd see a clean diagonal. Off-diagonal circles mean someone is fulfilled despite low hours, or putting in time without feeling fulfilled.",
+        tenure:
+          "If fulfillment grew with time in community, you'd see a clean diagonal. Off-diagonal circles mean someone is fulfilled despite being new, or has been here a long time without feeling fulfilled.",
+      };
+
+      function isAlignedCell(fulfillment, xValue, axisKey) {
+        const fulIdx = FULFILLMENT_LEVELS.indexOf(fulfillment); // 0=Yes, 1=Somewhat, 2=No
+        if (axisKey === "govSatisfaction") {
+          const xIdx = SATISFACTION_LEVELS.indexOf(xValue);
+          if (fulIdx === 0) return xIdx <= 1;
+          if (fulIdx === 1) return xIdx === 1 || xIdx === 2;
+          return xIdx >= 2;
+        }
+        if (axisKey === "hoursPerMonth") {
+          const xIdx = HOURS_GROUPS.indexOf(xValue);
+          if (fulIdx === 0) return xIdx >= 1;
+          if (fulIdx === 1) return true;
+          return xIdx <= 1;
+        }
+        if (axisKey === "tenure") {
+          const xIdx = TENURE_GROUPS.indexOf(xValue);
+          if (fulIdx === 0) return xIdx >= 1;
+          if (fulIdx === 1) return true;
+          return xIdx <= 1;
+        }
+        return true;
+      }
+
       function FulfillmentGridTab({ data }) {
-        const [selectedCell, setSelectedCell] = useState(null); // 'fulfillment|satisfaction'
+        const [selectedCell, setSelectedCell] = useState(null); // 'fulfillment|xValue'
+        const [axisKey, setAxisKey] = useState("govSatisfaction");
         const [tooltip, setTooltip] = useState({
           show: false,
           x: 0,
@@ -3563,12 +3613,23 @@
           sat: "",
         });
 
+        const axisOption = FULFILLMENT_AXIS_OPTIONS.find(
+          (o) => o.key === axisKey,
+        );
+        const xLevels = axisOption.levels;
+        const xAxisTitle = axisOption.axisTitle;
+
+        // Clear selection when axis changes
+        useEffect(() => {
+          setSelectedCell(null);
+        }, [axisKey]);
+
         // Transform raw dataset into 2D Grid Cell stats
         const gridStats = useMemo(() => {
           // Initialize cells
           const matrix = {};
           FULFILLMENT_LEVELS.forEach((f) => {
-            SATISFACTION_LEVELS.forEach((s) => {
+            xLevels.forEach((s) => {
               matrix[`${f}|${s}`] = {
                 fulfillment: f,
                 satisfaction: s,
@@ -3581,7 +3642,7 @@
 
           // Populate cell lists
           data.forEach((d) => {
-            const key = `${d.fulfillment}|${d.govSatisfaction}`;
+            const key = `${d.fulfillment}|${d[axisKey]}`;
             if (matrix[key]) {
               matrix[key].count += 1;
               matrix[key].respondents.push(d);
@@ -3596,7 +3657,7 @@
           });
 
           return Object.values(matrix);
-        }, [data]);
+        }, [data, axisKey, xLevels]);
 
         // Active cell information
         const activeCellData = useMemo(() => {
@@ -3612,16 +3673,27 @@
             {/* Main Visual grid Card */}
             <div className="flex-1 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 flex flex-col min-h-0 relative">
               <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-800">
-                  Fulfillment vs Governance Satisfaction
-                </h2>
-                <p className="text-xs text-slate-400 font-semibold mb-3">
-                  Comparing emotional satisfaction against political processes
-                </p>
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight text-slate-800">
+                      How does fulfillment align with governance?
+                    </h2>
+                    <p className="text-xs text-slate-400 font-semibold">
+                      Each circle is a group of respondents. Gray = fulfillment
+                      and governance satisfaction align. Gold = they don't —
+                      these are the most interesting cells.
+                    </p>
+                  </div>
+                  <AxisControlBar
+                    options={FULFILLMENT_AXIS_OPTIONS}
+                    activeKey={axisKey}
+                    onChange={setAxisKey}
+                  />
+                </div>
 
                 {/* Summary panel */}
                 <div className="bg-slate-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-slate-600 text-sm mb-4 leading-relaxed">
-                  {SUMMARY_TEXT_3}
+                  {FULFILLMENT_SUMMARIES[axisKey]}
                 </div>
               </div>
 
@@ -3632,6 +3704,9 @@
                   selectedCell={selectedCell}
                   onSelectCell={setSelectedCell}
                   setTooltip={setTooltip}
+                  xLevels={xLevels}
+                  xAxisTitle={xAxisTitle}
+                  axisKey={axisKey}
                 />
               </div>
 
@@ -3658,7 +3733,7 @@
                     </div>
                     <div className="flex justify-between space-x-2">
                       <span className="text-slate-400 font-semibold">
-                        Governance:
+                        {xAxisTitle + ":"}
                       </span>
                       <span className="font-bold text-white">
                         {tooltip.sat}
@@ -3679,6 +3754,7 @@
             <TagProfilePanel
               cellData={activeCellData}
               onClose={() => setSelectedCell(null)}
+              xAxisLabel={xAxisTitle}
             />
           </div>
         );
@@ -3690,6 +3766,9 @@
         selectedCell,
         onSelectCell,
         setTooltip,
+        xLevels,
+        xAxisTitle,
+        axisKey,
       }) {
         const containerRef = useRef(null);
         const svgRef = useRef(null);
@@ -3717,7 +3796,7 @@
           // Scales
           const xScale = d3
             .scalePoint()
-            .domain(SATISFACTION_LEVELS)
+            .domain(xLevels)
             .range([0, chartWidth])
             .padding(0.5);
 
@@ -3730,7 +3809,7 @@
           // Maximum size of circle (half the spacing between points)
           const maxCircleRadius =
             Math.min(
-              chartWidth / SATISFACTION_LEVELS.length,
+              chartWidth / xLevels.length,
               chartHeight / FULFILLMENT_LEVELS.length,
             ) * 0.4;
 
@@ -3754,7 +3833,7 @@
             .attr("stroke-width", 2);
 
           g.selectAll(".grid-line-y")
-            .data(SATISFACTION_LEVELS)
+            .data(xLevels)
             .enter()
             .append("line")
             .attr("x1", (d) => xScale(d))
@@ -3809,7 +3888,7 @@
               "class",
               "text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right",
             )
-            .text("Governance Satisfaction");
+            .text(xAxisTitle);
 
           // Cell circles groups
           const nodes = g
@@ -3855,12 +3934,15 @@
               setTooltip((prev) => ({ ...prev, show: false }));
             });
 
-          // Programmatic cell styling: Diagonal = Slate gray, Off-diagonal = energetic accent (Tangerine)
+          // Programmatic cell styling: Aligned = Slate gray, Outlier = alert gold
           const getCellFill = (d) => {
-            const key = `${d.fulfillment}|${d.satisfaction}`;
-            const isDiagonal = DIAGONAL_CELLS.includes(key);
             if (d.count === 0) return "none";
-            return isDiagonal ? "#64748b" : "#5B9EA6";
+            const aligned = isAlignedCell(
+              d.fulfillment,
+              d.satisfaction,
+              axisKey,
+            );
+            return aligned ? "#64748b" : "#C9B96C";
           };
 
           const getCellStroke = (d) => {
@@ -3924,7 +4006,7 @@
           resizeObserver.observe(container);
 
           return () => resizeObserver.disconnect();
-        }, [cells]);
+        }, [cells, xLevels, xAxisTitle, axisKey]);
 
         // Highlight selected cell without rebuilding the chart
         useEffect(() => {
@@ -3940,12 +4022,15 @@
             .attr("fill", function (d) {
               if (!d || d.count === 0) return "none";
               const key = `${d.fulfillment}|${d.satisfaction}`;
-              const isDiagonal = DIAGONAL_CELLS.includes(key);
-              if (key === selectedCell)
-                return isDiagonal ? "#334155" : "#3D7A82";
-              return isDiagonal ? "#64748b" : "#5B9EA6";
+              const aligned = isAlignedCell(
+                d.fulfillment,
+                d.satisfaction,
+                axisKey,
+              );
+              if (key === selectedCell) return aligned ? "#334155" : "#A89A4E";
+              return aligned ? "#64748b" : "#C9B96C";
             });
-        }, [selectedCell]);
+        }, [selectedCell, axisKey]);
 
         return (
           <div
@@ -4022,7 +4107,7 @@
       }
 
       // Detail Panel showing analytical Tag profile inside intersection cell
-      function TagProfilePanel({ cellData, onClose }) {
+      function TagProfilePanel({ cellData, onClose, xAxisLabel }) {
         if (!cellData) return null;
 
         // Extract and sort tags inside selected matrix cell
@@ -4053,7 +4138,7 @@
                     </span>
                   </div>
                   <div>
-                    Governance:{" "}
+                    {(xAxisLabel || "Governance") + ":"}{" "}
                     <span className="text-slate-600 font-bold">
                       {cellData.satisfaction}
                     </span>
@@ -4168,16 +4253,16 @@
         );
       }
 
-      // ── Barrier Axis Segmented Control ──────────────────────────
-      function BarrierAxisControl({ axisKey, onChange }) {
+      // ── Reusable Axis Segmented Control ──────────────────────────
+      function AxisControlBar({ options, activeKey, onChange }) {
         return (
           <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner shrink-0 border border-slate-200/50 axis-control-bar">
-            {BARRIER_AXIS_OPTIONS.map((opt) => (
+            {options.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => onChange(opt.key)}
                 className={`px-4 py-2 text-xs font-bold rounded-lg transition-all duration-300 focus:outline-none ${
-                  axisKey === opt.key
+                  activeKey === opt.key
                     ? "bg-white text-slate-900 shadow-sm border border-slate-200"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
@@ -4499,19 +4584,26 @@
                 <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 border-b border-slate-100 pb-4 mb-4">
                   <div>
                     <h2 className="text-xl font-bold tracking-tight text-slate-800">
-                      Barrier Stacked Bars
+                      Barriers to participation, grouped by Tenure
                     </h2>
                     <p className="text-xs text-slate-400 font-semibold">
-                      Respondent counts by group, segmented by dominant barrier
-                      type
+                      Bars show what types of barriers each group names. Use the
+                      selector to group by tenure, fulfillment, or governance
+                      satisfaction.
                     </p>
                   </div>
-                  <BarrierAxisControl axisKey={axisKey} onChange={setAxisKey} />
+                  <AxisControlBar
+                    options={BARRIER_AXIS_OPTIONS}
+                    activeKey={axisKey}
+                    onChange={setAxisKey}
+                  />
                 </div>
 
                 {/* Summary */}
                 <div className="bg-slate-50 border-l-4 border-emerald-500 p-4 rounded-r-xl text-slate-600 text-sm mb-4 leading-relaxed">
-                  {SUMMARY_TEXT_BARRIER_BARS}
+                  Bars show what types of barriers each group names. Use the
+                  selector to group by tenure, fulfillment, or governance
+                  satisfaction.
                 </div>
 
                 {/* Legend */}
@@ -4602,6 +4694,7 @@
               fulfillment: transformed.fulfillment || "Somewhat",
               govSatisfaction:
                 transformed.govSatisfaction || "Somewhat satisfied",
+              hoursPerMonth: transformed.hoursPerMonth || "0-2",
               likert: transformed.likert || {},
               tags: transformed.tags || [],
               excerpts: transformed.excerpts || {},
