@@ -1918,13 +1918,14 @@
           (a.id || "").localeCompare(b.id || ""),
         );
 
-        // 2. Generate deterministic anonymized name map
+        // 2. Generate deterministic anonymized name map using Notion UID field
         const anonMap = new Map();
         sortedPages.forEach((page, idx) => {
           const inventedIndex = idx % INVENTED_NAMES.length;
           const namePrefix = INVENTED_NAMES[inventedIndex];
-          const rowNumber = String(idx + 1).padStart(2, "0");
-          const anonName = `${namePrefix}-${rowNumber}`;
+          const uid = getPropValue(page, "UID", "number", idx + 1);
+          const paddedUid = String(uid).padStart(2, "0");
+          const anonName = `${namePrefix}-${paddedUid}`;
           anonMap.set(page.id, anonName);
         });
 
@@ -2084,6 +2085,11 @@
           return savedMode === null ? true : savedMode === "true";
         });
 
+        const [anonymize, setAnonymize] = useState(() => {
+          const saved = localStorage.getItem("cvc_anonymize");
+          return saved === null ? true : saved === "true";
+        });
+
         const [loading, setLoading] = useState(false);
         const [error, setError] = useState(null);
         const [rawData, setRawData] = useState([]);
@@ -2129,12 +2135,14 @@
           loadSurveyData(config, useDemo);
         }, []);
 
-        const handleSaveSettings = (newConfig, newUseDemo) => {
+        const handleSaveSettings = (newConfig, newUseDemo, newAnonymize) => {
           setConfig(newConfig);
           setUseDemo(newUseDemo);
+          setAnonymize(newAnonymize);
           localStorage.setItem("cvc_notion_key", newConfig.NOTION_API_KEY);
           localStorage.setItem("cvc_notion_db", newConfig.NOTION_DATABASE_ID);
           localStorage.setItem("cvc_use_demo", String(newUseDemo));
+          localStorage.setItem("cvc_anonymize", String(newAnonymize));
           setShowSettings(false);
           loadSurveyData(newConfig, newUseDemo);
         };
@@ -2345,6 +2353,7 @@
                     <DatabaseViewerTab
                       rawData={rawData}
                       surveyData={surveyData}
+                      anonymize={anonymize}
                     />
                   )}
                 </div>
@@ -2356,6 +2365,7 @@
               <SettingsModal
                 config={config}
                 useDemo={useDemo}
+                anonymize={anonymize}
                 onClose={() => setShowSettings(false)}
                 onSave={handleSaveSettings}
               />
@@ -2371,11 +2381,12 @@
       }
 
       // Settings Modal
-      function SettingsModal({ config, useDemo, onClose, onSave }) {
+      function SettingsModal({ config, useDemo, anonymize, onClose, onSave }) {
         const [apiKey, setApiKey] = useState(config.NOTION_API_KEY);
         const [dbId, setDbId] = useState(config.NOTION_DATABASE_ID);
         const [proxyUrl, setProxyUrl] = useState(config.PROXY_URL);
         const [demoToggle, setDemoToggle] = useState(useDemo);
+        const [anonToggle, setAnonToggle] = useState(anonymize);
 
         const handleSubmit = (e) => {
           e.preventDefault();
@@ -2386,6 +2397,7 @@
               PROXY_URL: proxyUrl.trim(),
             },
             demoToggle,
+            anonToggle,
           );
         };
 
@@ -2422,21 +2434,44 @@
 
               {/* Form */}
               <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                {/* Demo Mode Toggle */}
+                {/* Anonymize Toggle */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex items-center justify-between">
                   <div>
                     <label className="font-semibold text-sm text-slate-800 block">
-                      Use Preloaded Demo Data
+                      Anonymize Responses
                     </label>
                     <span className="text-xs text-slate-400 font-medium">
-                      Runs immediately without credentials
+                      Hides real names in the Data tab
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAnonToggle(!anonToggle)}
+                    className={`w-12 h-6 rounded-full p-1 transition-colors-300 duration-200 focus:outline-none shrink-0 ${
+                      anonToggle
+                        ? "bg-emerald-500 flex justify-end"
+                        : "bg-slate-300 flex justify-start"
+                    }`}
+                  >
+                    <div className="w-4 h-4 rounded-full bg-white shadow" />
+                  </button>
+                </div>
+
+                {/* Live Notion Toggle */}
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/60 flex items-center justify-between">
+                  <div>
+                    <label className="font-semibold text-sm text-slate-800 block">
+                      Use Live Notion Data
+                    </label>
+                    <span className="text-xs text-slate-400 font-medium">
+                      Requires API credentials and local proxy
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setDemoToggle(!demoToggle)}
                     className={`w-12 h-6 rounded-full p-1 transition-colors-300 duration-200 focus:outline-none shrink-0 ${
-                      demoToggle
+                      !demoToggle
                         ? "bg-emerald-500 flex justify-end"
                         : "bg-slate-300 flex justify-start"
                     }`}
@@ -4665,7 +4700,7 @@
       }
 
       // Component to view and inspect raw Notion database entries
-      function DatabaseViewerTab({ rawData, surveyData }) {
+      function DatabaseViewerTab({ rawData, surveyData, anonymize }) {
         const [searchTerm, setSearchTerm] = useState("");
         const [viewMode, setViewMode] = useState("table"); // 'table' | 'json'
         const [expandedRow, setExpandedRow] = useState(null);
@@ -4710,7 +4745,7 @@
           return mergedData.filter((item) => {
             return (
               item.id.toLowerCase().includes(term) ||
-              item.realName.toLowerCase().includes(term) ||
+              (!anonymize && item.realName.toLowerCase().includes(term)) ||
               item.anonName.toLowerCase().includes(term) ||
               item.tenure.toLowerCase().includes(term) ||
               item.fulfillment.toLowerCase().includes(term) ||
@@ -4892,9 +4927,11 @@
                   <table className="w-full border-collapse text-left text-xs text-slate-700">
                     <thead className="sticky top-0 bg-slate-900 text-slate-100 font-bold uppercase tracking-wider select-none z-10">
                       <tr>
-                        <th className="px-4 py-3 font-semibold text-[10px]">
-                          Real Name
-                        </th>
+                        {!anonymize && (
+                          <th className="px-4 py-3 font-semibold text-[10px]">
+                            Real Name
+                          </th>
+                        )}
                         <th className="px-4 py-3 font-semibold text-[10px]">
                           Pseudonym
                         </th>
@@ -4926,9 +4963,11 @@
                             <tr
                               className={`hover:bg-slate-50/50 transition-colors ${idx % 2 === 1 ? "bg-slate-50/20" : ""}`}
                             >
-                              <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
-                                {item.realName}
-                              </td>
+                              {!anonymize && (
+                                <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">
+                                  {item.realName}
+                                </td>
+                              )}
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <span className="px-2.5 py-1 bg-slate-950 text-white rounded-lg text-[10px] font-bold shadow-sm">
                                   {item.anonName}
